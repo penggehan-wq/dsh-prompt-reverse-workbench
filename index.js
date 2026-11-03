@@ -12,7 +12,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { extname, isAbsolute, join, resolve } from 'node:path'
 
@@ -268,15 +268,42 @@ async function readRequestBody(req, limit = 64 * 1024 * 1024) {
   }
 }
 
+function assertJsonRequest(req) {
+  const type = String(req.headers['content-type'] || '').toLowerCase()
+  if (!type.startsWith('application/json')) {
+    const error = new Error('只接受 application/json')
+    error.status = 415
+    throw error
+  }
+  const origin = req.headers.origin
+  if (!origin) return
+  let originHost = ''
+  try {
+    originHost = new URL(origin).host
+  } catch {
+    const error = new Error('Origin 非法')
+    error.status = 403
+    throw error
+  }
+  const host = String(req.headers.host || '')
+  if (!originHost || !host || originHost !== host) {
+    const error = new Error('Origin 与 Host 不一致')
+    error.status = 403
+    throw error
+  }
+}
+
 // ---------------------------------------------------------------------------
 // persistent store
 // ---------------------------------------------------------------------------
 
 function createStore(dir) {
   const file = join(dir, 'records.json')
+  const thumbDir = join(dir, 'thumbs')
   let state = { version: RECORD_VERSION, records: [] }
   try {
     mkdirSync(dir, { recursive: true })
+    mkdirSync(thumbDir, { recursive: true })
     if (existsSync(file)) {
       const parsed = JSON.parse(readFileSync(file, 'utf8'))
       if (parsed && Array.isArray(parsed.records)) state = { version: RECORD_VERSION, records: parsed.records }
@@ -301,6 +328,7 @@ function createStore(dir) {
   return {
     dir,
     file,
+    thumbDir,
     list() { return state.records },
     find(id) { return state.records.find((record) => record.id === id) },
     add(record) {
@@ -308,9 +336,14 @@ function createStore(dir) {
       if (state.records.length > MAX_RECORDS) state.records.length = MAX_RECORDS
       return save()
     },
+    async saveThumb(id, data) {
+      await mkdir(thumbDir, { recursive: true })
+      await writeFile(join(thumbDir, `${id}.webp`), data)
+    },
     async remove(id) {
       const index = state.records.findIndex((record) => record.id === id)
       if (index >= 0) state.records.splice(index, 1)
+      try { await unlink(join(thumbDir, `${id}.webp`)) } catch {}
       await save()
     },
     save,
@@ -410,9 +443,9 @@ function normalizeProportions(raw, warnings) {
 
 function normalizeCamera(raw) {
   const camera = raw && typeof raw === 'object' ? raw : {}
-  const ratio = str(camera.aspect_ratio, 12).replace(/\s+/gu, '')
+  const ratio = str(camera.aspect_ratio, 20).replace(/\s+/gu, '')
   return {
-    aspect_ratio: /^\d{1,2}:\d{1,2}$/u.test(ratio) ? ratio : '1:1',
+    aspect_ratio: /^\d{1,3}(?:\.\d+)?:\d{1,3}(?:\.\d+)?$/u.test(ratio) ? ratio : '1:1',
     focal_length_mm: int(camera.focal_length_mm, 14, 300),
     shot_zh: str(camera.shot_zh, 200),
     shot_en: str(camera.shot_en, 200),
@@ -653,8 +686,8 @@ function metricsEn(analysis, overrides) {
   const b = analysis.body
   const p = analysis.proportions
   const parts = []
-  const height = overrides.height_cm ?? b.height_cm
-  const headUnits = overrides.head_units ?? b.head_units
+  const height = overrides.height_cm !== undefined ? overrides.height_cm : b.height_cm
+  const headUnits = overrides.head_units !== undefined ? overrides.head_units : b.head_units
   if (height) parts.push(`about ${Math.round(height)} cm tall (image-based estimate)`)
   if (headUnits) parts.push(`${fmt(headUnits)} heads tall from crown to floor`)
   if (b.shoulder_width_head_units) parts.push(`shoulder width ${fmt(b.shoulder_width_head_units)} head widths`)
@@ -672,8 +705,8 @@ function metricsZh(analysis, overrides) {
   const b = analysis.body
   const p = analysis.proportions
   const parts = []
-  const height = overrides.height_cm ?? b.height_cm
-  const headUnits = overrides.head_units ?? b.head_units
+  const height = overrides.height_cm !== undefined ? overrides.height_cm : b.height_cm
+  const headUnits = overrides.head_units !== undefined ? overrides.head_units : b.head_units
   if (height) parts.push(`身高约 ${Math.round(height)}cm（图像估算）`)
   if (headUnits) parts.push(`${fmt(headUnits)} 头身`)
   if (b.shoulder_width_head_units) parts.push(`肩宽 ${fmt(b.shoulder_width_head_units)} 头宽`)
@@ -691,7 +724,7 @@ function numericLocksEn(analysis, overrides) {
   const b = analysis.body
   const p = analysis.proportions
   const out = []
-  const headUnits = overrides.head_units ?? b.head_units
+  const headUnits = overrides.head_units !== undefined ? overrides.head_units : b.head_units
   if (headUnits) out.push(`${fmt(headUnits)} heads tall`)
   if (p.face_width_height_ratio) out.push(`face width-to-height ${fmt(p.face_width_height_ratio)}`)
   if (p.interpupillary_face_ratio) out.push(`interpupillary/face-width ${fmt(p.interpupillary_face_ratio)}`)
@@ -707,7 +740,7 @@ function numericLocksZh(analysis, overrides) {
   const b = analysis.body
   const p = analysis.proportions
   const out = []
-  const headUnits = overrides.head_units ?? b.head_units
+  const headUnits = overrides.head_units !== undefined ? overrides.head_units : b.head_units
   if (headUnits) out.push(`${fmt(headUnits)} 头身`)
   if (p.face_width_height_ratio) out.push(`面宽/面高 ${fmt(p.face_width_height_ratio)}`)
   if (p.interpupillary_face_ratio) out.push(`瞳距/面宽 ${fmt(p.interpupillary_face_ratio)}`)
@@ -729,7 +762,17 @@ function sizeFor(aspect) {
     '2:3': [832, 1248],
     '3:2': [1248, 832],
   }
-  return map[aspect] || map['1:1']
+  if (map[aspect]) return map[aspect]
+  const match = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/u.exec(String(aspect || ''))
+  if (!match) return map['1:1']
+  const w = Number(match[1])
+  const h = Number(match[2])
+  if (!(w > 0 && h > 0)) return map['1:1']
+  const longEdge = 1344
+  const round8 = (value) => Math.max(256, Math.min(2048, Math.round(value / 8) * 8))
+  return w >= h
+    ? [longEdge, round8((longEdge * h) / w)]
+    : [round8((longEdge * w) / h), longEdge]
 }
 
 function baseNegativeEn() {
@@ -751,7 +794,7 @@ function driftFixes(analysis, overrides) {
       ? `正向重申 face width-to-height ratio ${fmt(ratio)}，并固定面宽/面高 ${fmt(ratio)}；负向加入 long face, sharp chin, narrow jaw, elongated midface`
       : '负向加入 long face, sharp chin, narrow jaw, elongated midface；正向重申原图脸型，不要用“瓜子脸/长脸”这类会拉长脸型的词',
   })
-  const headUnits = overrides.head_units ?? b.head_units
+  const headUnits = overrides.head_units !== undefined ? overrides.head_units : b.head_units
   const legRatio = p.leg_body_ratio
   list.push({
     symptom: '显矮 / 腿变短 / 头身比漂移',
@@ -827,7 +870,7 @@ function driftFixes(analysis, overrides) {
 function compilePrompts(analysis, overrides) {
   const b = analysis.body
   const p = analysis.proportions
-  const headUnits = overrides.head_units ?? b.head_units
+  const headUnits = overrides.head_units !== undefined ? overrides.head_units : b.head_units
   const age = overrides.age_range || analysis.age_range
   const genderEn = overrides.gender && overrides.gender !== 'unknown' ? overrides.gender : analysis.gender
   const genderZh = overrides.gender === 'female' ? '女性' : overrides.gender === 'male' ? '男性' : overrides.gender === 'androgynous' ? '中性' : analysis.gender_zh
@@ -1092,27 +1135,28 @@ function compilePrompts(analysis, overrides) {
     ], '；'), 420)
 
   // 手机版：一段可直接粘贴到豆包/即梦/文生图的中文，不带 <image1>、不带负向词；内容按用户参考图原样保留。
-  const mobileStyle = '真实照片质感，自然皮肤纹理，柔和侧光，浅景深'
-  const mobileZh = isCloseup
-    ? trimTrailing(joinClauses([anatomyPromptZhFinal, analysis.camera_zh, qualityLockZh], '；'), 420)
+  const mobileQualityZh = tech.quality_zh || '真实照片质感，自然皮肤纹理，柔和侧光，浅景深'
+  const mobileQualityEn = tech.quality_en || 'photorealistic, natural skin texture, soft side light, shallow depth of field'
+  const mobileBodyZh = isCloseup
+    ? trimTrailing(joinClauses([anatomyPromptZhFinal, analysis.camera_zh], '；'), 300)
     : trimTrailing(joinClauses([
       trimTrailing(identityZh, 150),
       trimTrailing(faceDetailsZh, 80),
       trimTrailing(analysis.body_zh, 70),
       analysis.wardrobe_zh ? `穿${trimTrailing(analysis.wardrobe_zh, 80)}` : '',
       trimTrailing(analysis.scene_zh, 60),
-      mobileStyle,
-    ], '；'), 380)
-  const mobileEn = isCloseup
-    ? trimTrailing(joinClauses([anatomyPromptEnFinal, analysis.camera_en, qualityLockEn], '; '), 500)
+    ], '；'), 300)
+  const mobileBodyEn = isCloseup
+    ? trimTrailing(joinClauses([anatomyPromptEnFinal, analysis.camera_en], '; '), 360)
     : trimTrailing(joinClauses([
       trimTrailing(identityEn, 180),
       trimTrailing(faceDetailsEn, 100),
       trimTrailing(analysis.body_en, 90),
       analysis.wardrobe_en ? `wearing ${trimTrailing(analysis.wardrobe_en, 90)}` : '',
       trimTrailing(analysis.scene_en, 70),
-      mobileStyle,
-    ], '; '), 500)
+    ], '; '), 360)
+  const mobileZh = trimTrailing(joinClauses([mobileBodyZh, mobileQualityZh], '；'), 420)
+  const mobileEn = trimTrailing(joinClauses([mobileBodyEn, mobileQualityEn], '; '), 500)
   const mobileNoteZh = isCloseup
     ? '手机版只保留参考图可见的局部、手/手指动作、机位和质感；不带 <image1>、不带负向词。'
     : '手机版不带 <image1>、不带负向词；衣服/场景可以直接改，再整段复制。文生图锁不住真实身份，要锁脸请用参考图编辑。'
@@ -1209,6 +1253,27 @@ function recordTitle(analysis, fallback) {
   return str(analysis && analysis.title, 40) || fallback || '未命名反推'
 }
 
+function toSummary(record) {
+  return {
+    id: record.id,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    title: record.title,
+    status: record.status,
+    error: record.error || '',
+    provider: record.provider || '',
+    model: record.model || '',
+    effort: record.effort || '',
+    image: record.image ? {
+      mediaType: record.image.mediaType,
+      width: record.image.width,
+      height: record.image.height,
+      bytes: record.image.bytes,
+      name: record.image.name || '',
+    } : null,
+  }
+}
+
 function toPublic(record) {
   return {
     id: record.id,
@@ -1270,10 +1335,12 @@ export function apply(ctx, config = {}) {
   // 上一次成功使用的视觉路由，供客户端显示。
   let lastRoute = null
 
-  function publicState() {
+  function publicState(selectedId) {
     const latest = store.list().find((record) => record.provider && record.model)
+    const selected = (selectedId && store.find(selectedId)) || store.list()[0] || null
     return {
-      records: store.list().slice(0, 80).map(toPublic),
+      records: store.list().slice(0, 80).map(toSummary),
+      selected: selected ? toPublic(selected) : null,
       vision: lastRoute || (latest
         ? { provider: latest.provider, model: latest.model, effort: latest.effort || '' }
         : null),
@@ -1422,7 +1489,8 @@ export function apply(ctx, config = {}) {
         throw new Error(`视觉模型返回的 JSON 无法解析：${error.message}。原始输出已保留，可在面板「查看原始 JSON」里检查后重试。`)
       }
       const analysis = normalizeAnalysis(parsed)
-      const { params, ...promptBlocks } = compilePrompts(analysis, record.overrides)
+      const effective = applyOverrides(analysis, record.overrides)
+      const { params, ...promptBlocks } = compilePrompts(effective, record.overrides)
       record.analysis = analysis
       if (!record.titleLocked) record.title = recordTitle(analysis, record.title)
       record.prompts = promptBlocks
@@ -1466,7 +1534,7 @@ export function apply(ctx, config = {}) {
     return running.get(id) || Promise.resolve()
   }
 
-  async function createRecord({ buffer, mediaType, name, attachment, title }) {
+  async function createRecord({ buffer, mediaType, name, attachment, title, thumb }) {
     if (!MEDIA_TYPES.has(mediaType)) throw new Error('只支持 PNG / JPEG / WebP / GIF')
     let ref = attachment
     if (!ref) {
@@ -1498,6 +1566,7 @@ export function apply(ctx, config = {}) {
       raw: '',
     }
     await store.add(record)
+    if (thumb && thumb.length) await store.saveThumb(id, thumb)
     return record
   }
 
@@ -1508,14 +1577,16 @@ export function apply(ctx, config = {}) {
   const routes = [
     ['state', async (req, res) => {
       if (req.method !== 'GET') throw new Error('只支持 GET')
-      return json(res, 200, publicState())
+      const url = new URL(req.url || '/', 'http://localhost')
+      return json(res, 200, publicState(url.searchParams.get('selected') || ''))
     }],
     ['record', async (req, res) => {
       if (req.method !== 'GET') throw new Error('只支持 GET')
       const url = new URL(req.url || '/', 'http://localhost')
       const record = store.find(url.searchParams.get('id') || '')
       if (!record) return json(res, 404, { error: '记录不存在' })
-      return json(res, 200, { ...toPublic(record), raw: record.raw || '' })
+      const includeRaw = /^(1|true)$/u.test(url.searchParams.get('include_raw') || '')
+      return json(res, 200, { ...toPublic(record), ...(includeRaw ? { raw: record.raw || '' } : {}) })
     }],
     ['upload', async (req, res) => {
       if (req.method !== 'POST') throw new Error('只支持 POST')
@@ -1524,7 +1595,10 @@ export function apply(ctx, config = {}) {
       if (!data) throw new Error('缺少图片数据')
       const mediaType = str(body.mediaType, 40)
       const buffer = Buffer.from(data.replace(/^data:[^;]+;base64,/u, ''), 'base64')
-      const record = await createRecord({ buffer, mediaType, name: str(body.name, 120), title: str(body.title, 60) })
+      const thumbData = typeof body.thumb === 'string' ? body.thumb : ''
+      const thumb = thumbData ? Buffer.from(thumbData.replace(/^data:[^;]+;base64,/u, ''), 'base64') : null
+      if (thumb && thumb.length > 512 * 1024) throw new Error('缩略图超过 512KB')
+      const record = await createRecord({ buffer, mediaType, name: str(body.name, 120), title: str(body.title, 60), thumb })
       await startAnalysis(record.id)
       return json(res, 200, { record: toPublic(record) })
     }],
@@ -1579,6 +1653,17 @@ export function apply(ctx, config = {}) {
       const url = new URL(req.url || '/', 'http://localhost')
       const record = store.find(url.searchParams.get('record') || '')
       if (!record) return json(res, 404, { error: '记录不存在' })
+      const thumbPath = join(store.thumbDir, `${record.id}.webp`)
+      if (url.searchParams.get('thumb') === '1' && existsSync(thumbPath)) {
+        const data = readFileSync(thumbPath)
+        res.writeHead(200, {
+          'content-type': 'image/webp',
+          'content-length': data.length,
+          'cache-control': 'private, max-age=86400',
+        })
+        if (req.method === 'HEAD') return res.end()
+        return res.end(data)
+      }
       const stored = await ctx.attachments.readImage(record.image)
       res.writeHead(200, {
         'content-type': stored.ref.mediaType,
@@ -1588,19 +1673,6 @@ export function apply(ctx, config = {}) {
       if (req.method === 'HEAD') return res.end()
       return res.end(Buffer.from(stored.data))
     }],
-    ['credentials', async (req, res) => {
-      const creds = ctx.get('credentials')
-      if (!creds) return json(res, 200, { available: false })
-      const out = {}
-      for (const ref of ['SILICONFLOW_API_KEY', 'APIYI_API_KEY', 'DSH_SECRET_SILICONFLOW_API_KEY']) {
-        try {
-          out[ref] = await creds.describe(ref)
-        } catch (error) {
-          out[ref] = { error: error && error.message ? error.message : String(error) }
-        }
-      }
-      return json(res, 200, { available: true, refs: out })
-    }],
   ]
 
   for (const [route, handler] of routes) {
@@ -1609,11 +1681,12 @@ export function apply(ctx, config = {}) {
       path: `${API}/${route}`,
       handler: async (req, res) => {
         try {
+          if (req.method === 'POST') assertJsonRequest(req)
           await handler(req, res)
         } catch (error) {
           const message = error && error.message ? error.message : String(error)
           if (!res.headersSent) {
-            res.writeHead(500, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+            res.writeHead(error && error.status ? error.status : 500, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
             res.end(JSON.stringify({ error: message }))
           } else {
             res.end()

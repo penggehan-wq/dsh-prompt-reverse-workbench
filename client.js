@@ -16,7 +16,7 @@ window.__ModuleLoader__.load({
       recordsTotal: '条',
       emptyRail: '还没有记录，先上传一张人物图。',
       emptyTitle: '把人物图拖进来',
-      emptyHint: '支持 PNG / JPEG / WebP / GIF，单张不超过 40MB；也可以直接 Ctrl+V 粘贴。',
+      emptyHint: '支持 PNG / JPEG / WebP / GIF，单张不超过 40MB；上传后自动反推，记录只保存在本机。',
       drop: '拖入图片，或点击选择文件',
       paste: '也可以直接 Ctrl+V 粘贴',
       step1: '上传',
@@ -68,7 +68,7 @@ window.__ModuleLoader__.load({
       face: '面部',
       body: '身材',
       wardrobe: '服装',
-      camera: '机位',
+      cameraAngle: '机位',
       lighting: '光线',
       style: '风格',
       warnings: '注意',
@@ -160,6 +160,38 @@ window.__ModuleLoader__.load({
       noPrompts: '提示词还没有生成。',
       imageAlt: '反推原图',
       totalRecords: '共',
+      copyMain: '复制主提示词',
+      more: '更多操作',
+      tabMain: '主提示词',
+      tabReference: '参考图编辑',
+      tabMobile: '手机版',
+      tabNegative: '负向',
+      tabSheet: '三视图',
+      segZh: '中文',
+      segEn: 'EN',
+      segQwen: 'Qwen',
+      segGeneric: '通用',
+      scene: '场景',
+      aspect: '画幅',
+      heightMethod: '估算方法',
+      faceShape: '脸型',
+      eyes: '眼睛',
+      nose: '鼻子',
+      lips: '嘴唇',
+      skin: '皮肤',
+      hair: '发型',
+      marks: '面部标记',
+      identitySection: '身份卡',
+      reproduceSection: '复现与纠偏',
+      componentsSection: '提示词组件',
+      viewFull: '查看大图',
+      searchRecords: '搜索记录',
+      noMatch: '没有匹配的记录',
+      chars: '字',
+      refHintShort: 'Qwen 用 <image1>；Seedream / Flux / Gemini / 豆包用通用版。',
+      mobileHintShort: '不带 <image1>、不带负向词；可直接改字。',
+      sheetHintShort: '先生成三视图定稿，再拿它当固定身份参考。',
+      close: '关闭',
     }
 
     const en = {
@@ -172,7 +204,7 @@ window.__ModuleLoader__.load({
       recordsTotal: '',
       emptyRail: 'No records yet. Upload a portrait to start.',
       emptyTitle: 'Drop a portrait here',
-      emptyHint: 'PNG / JPEG / WebP / GIF, up to 40MB. You can also paste with Ctrl+V.',
+      emptyHint: 'PNG / JPEG / WebP / GIF, up to 40MB. Analysis starts automatically; records stay on this machine.',
       drop: 'Drop an image, or click to choose a file',
       paste: 'or paste with Ctrl+V',
       step1: 'Upload',
@@ -224,7 +256,7 @@ window.__ModuleLoader__.load({
       face: 'Face',
       body: 'Body',
       wardrobe: 'Wardrobe',
-      camera: 'Camera',
+      cameraAngle: 'Camera angle',
       lighting: 'Lighting',
       style: 'Style',
       warnings: 'Warnings',
@@ -316,6 +348,38 @@ window.__ModuleLoader__.load({
       noPrompts: 'Prompts are not generated yet.',
       imageAlt: 'reference image',
       totalRecords: 'total',
+      copyMain: 'Copy main prompt',
+      more: 'More actions',
+      tabMain: 'Main',
+      tabReference: 'Reference edit',
+      tabMobile: 'Mobile',
+      tabNegative: 'Negative',
+      tabSheet: 'Character sheet',
+      segZh: '中文',
+      segEn: 'EN',
+      segQwen: 'Qwen',
+      segGeneric: 'Generic',
+      scene: 'Scene',
+      aspect: 'Aspect',
+      heightMethod: 'Estimate method',
+      faceShape: 'Face shape',
+      eyes: 'Eyes',
+      nose: 'Nose',
+      lips: 'Lips',
+      skin: 'Skin',
+      hair: 'Hair',
+      marks: 'Facial marks',
+      identitySection: 'Identity card',
+      reproduceSection: 'Reproduce & correct',
+      componentsSection: 'Prompt components',
+      viewFull: 'View full size',
+      searchRecords: 'Search records',
+      noMatch: 'No matching records',
+      chars: 'chars',
+      refHintShort: 'Qwen uses <image1>; Seedream / Flux / Gemini / Doubao use the generic version.',
+      mobileHintShort: 'No <image1>, no negative prompt; edit the text directly.',
+      sheetHintShort: 'Generate a character sheet first, then reuse it as the fixed identity reference.',
+      close: 'Close',
     }
 
     function useT(ctx) {
@@ -363,6 +427,70 @@ window.__ModuleLoader__.load({
       return ''
     }
 
+    function loadImageFile(blob) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(blob)
+        const image = new Image()
+        image.onload = () => resolve({ image, url })
+        image.onerror = () => {
+          URL.revokeObjectURL(url)
+          reject(new Error('读取图片失败'))
+        }
+        image.src = url
+      })
+    }
+
+    function canvasBlob(canvas, type, quality) {
+      return new Promise((resolve) => canvas.toBlob(resolve, type, quality))
+    }
+
+    async function makeThumb(blob) {
+      try {
+        const { image, url } = await loadImageFile(blob)
+        const longEdge = Math.max(image.naturalWidth, image.naturalHeight)
+        const scale = Math.min(1, 128 / longEdge)
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
+        URL.revokeObjectURL(url)
+        const out = await canvasBlob(canvas, 'image/webp', 0.82)
+        return out ? await readFileBase64(out) : ''
+      } catch {
+        return ''
+      }
+    }
+
+    async function prepareUpload(file) {
+      let blob = file
+      let mediaType = guessMediaType(file)
+      let name = file.name || 'upload'
+      if (mediaType !== 'image/gif' && file.size > 6 * 1024 * 1024) {
+        const { image, url } = await loadImageFile(file)
+        const longEdge = Math.max(image.naturalWidth, image.naturalHeight)
+        const scale = Math.min(1, 4096 / longEdge)
+        if (scale < 1) {
+          const canvas = document.createElement('canvas')
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+          canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
+          const out = await canvasBlob(canvas, 'image/webp', 0.92)
+          if (out) {
+            blob = out
+            mediaType = 'image/webp'
+            name = name.replace(/\.[^.]+$/u, '') + '.webp'
+          }
+        }
+        URL.revokeObjectURL(url)
+      }
+      return {
+        data: await readFileBase64(blob),
+        mediaType,
+        name,
+        thumb: await makeThumb(blob),
+      }
+    }
+
     function formatDate(iso) {
       if (!iso) return ''
       try {
@@ -376,7 +504,7 @@ window.__ModuleLoader__.load({
       return v === null || v === undefined || v === '' ? '—' : `${v}${suffix}`
     }
 
-    function CopyButton({ text, t, onNotice, label }) {
+    function CopyButton({ text, t, onNotice, label, variant }) {
       const [done, setDone] = React.useState(false)
       const copy = async () => {
         if (!text) return
@@ -396,24 +524,134 @@ window.__ModuleLoader__.load({
         onNotice(t('copied'))
         window.setTimeout(() => setDone(false), 1400)
       }
-      return h('button', { type: 'button', className: 'prw-btn prw-btn-sm', onClick: copy, disabled: !text }, done ? t('copied') : (label || t('copy')))
+      const className = variant === 'primary' ? 'prw-btn prw-btn-primary' : 'prw-btn prw-btn-sm'
+      return h('button', { type: 'button', className, onClick: copy, disabled: !text }, done ? t('copied') : (label || t('copy')))
     }
 
-    function PromptCard({ title, hint, text, t, onNotice }) {
-      return h('section', { className: 'prw-card' },
-        h('header', { className: 'prw-card-head' },
-          h('div', null,
-            h('h3', null, title),
-            hint ? h('p', { className: 'prw-card-hint' }, hint) : null,
-          ),
-          h(CopyButton, { text, t, onNotice }),
+    function Seg({ value, options, onChange }) {
+      return h('div', { className: 'prw-seg' }, options.map(([key, label]) =>
+        h('button', {
+          key,
+          type: 'button',
+          className: `prw-seg-btn${value === key ? ' is-active' : ''}`,
+          onClick: () => onChange(key),
+        }, label),
+      ))
+    }
+
+    function PromptBlock({ title, text, t, onNotice }) {
+      if (!text) return null
+      return h('details', { className: 'prw-block' },
+        h('summary', null,
+          h('span', { className: 'prw-block-title' }, title),
+          h('span', { className: 'prw-block-meta' }, String(text.length)),
         ),
-        h('pre', { className: 'prw-prompt' }, text || t('noPrompts')),
+        h('div', { className: 'prw-block-body' },
+          h('pre', { className: 'prw-prompt' }, text),
+          h('div', { className: 'prw-block-foot' }, h(CopyButton, { text, t, onNotice })),
+        ),
+      )
+    }
+
+    function PromptPanel({ record, prompts, t, onNotice }) {
+      const [tab, setTab] = React.useState('main')
+      const [lang, setLang] = React.useState('zh')
+      const [refMode, setRefMode] = React.useState('qwen')
+      const mobileGenerated = prompts.mobile_zh || prompts.compact_zh || prompts.full_zh || ''
+      const [mobileText, setMobileText] = React.useState(mobileGenerated)
+
+      React.useEffect(() => {
+        setTab('main')
+        setLang('zh')
+        setRefMode('qwen')
+      }, [record.id])
+      React.useEffect(() => { setMobileText(mobileGenerated) }, [record.id, record.updatedAt])
+
+      const tabs = [
+        ['main', t('tabMain')],
+        ['reference', t('tabReference')],
+        ['mobile', t('tabMobile')],
+        ['negative', t('tabNegative')],
+        prompts.identity_sheet_zh ? ['sheet', t('tabSheet')] : null,
+      ].filter(Boolean)
+
+      const activeTab = tabs.some(([key]) => key === tab) ? tab : 'main'
+      const generic = prompts.reference_edit_generic_zh || ''
+      const text = activeTab === 'main'
+        ? (lang === 'en' ? prompts.full_en : prompts.full_zh)
+        : activeTab === 'negative'
+          ? (lang === 'en' ? prompts.negative_en : prompts.negative_zh)
+          : activeTab === 'reference'
+            ? (refMode === 'generic' ? generic : prompts.reference_edit_zh)
+            : activeTab === 'sheet'
+              ? prompts.identity_sheet_zh
+              : ''
+      const isEn = (activeTab === 'main' || activeTab === 'negative') && lang === 'en'
+      const hint = activeTab === 'reference'
+        ? t('refHintShort')
+        : activeTab === 'mobile'
+          ? t('mobileHintShort')
+          : activeTab === 'sheet'
+            ? t('sheetHintShort')
+            : ''
+
+      return h('section', { className: 'prw-panel' },
+        h('div', { className: 'prw-tabs' }, tabs.map(([key, label]) =>
+          h('button', {
+            key,
+            type: 'button',
+            className: `prw-tab${activeTab === key ? ' is-active' : ''}`,
+            onClick: () => setTab(key),
+          }, label),
+        )),
+        h('div', { className: 'prw-panel-bar' },
+          h('div', { className: 'prw-panel-controls' },
+            (activeTab === 'main' || activeTab === 'negative')
+              ? h(Seg, { value: lang, onChange: setLang, options: [['zh', t('segZh')], ['en', t('segEn')]] })
+              : null,
+            activeTab === 'reference'
+              ? h(Seg, {
+                value: refMode,
+                onChange: setRefMode,
+                options: [['qwen', t('segQwen')], ...(generic ? [['generic', t('segGeneric')]] : [])],
+              })
+              : null,
+            h('span', { className: 'prw-panel-count' },
+              activeTab === 'mobile' ? `${mobileText.length} ${t('chars')}` : (text ? `${text.length} ${t('chars')}` : '')),
+          ),
+          h('div', { className: 'prw-panel-actions' },
+            activeTab === 'mobile'
+              ? h('button', { type: 'button', className: 'prw-link', onClick: () => setMobileText(mobileGenerated) }, t('resetMobile'))
+              : null,
+            h(CopyButton, {
+              text: activeTab === 'mobile' ? mobileText : text,
+              t,
+              onNotice,
+              label: activeTab === 'mobile' ? t('copyMobile') : undefined,
+            }),
+          ),
+        ),
+        activeTab === 'mobile'
+          ? h('textarea', {
+            className: 'prw-mobile-input',
+            value: mobileText,
+            rows: 7,
+            spellCheck: false,
+            onChange: (event) => setMobileText(event.target.value),
+          })
+          : h('pre', { className: `prw-prompt${isEn ? ' is-en' : ''}` }, text || t('noPrompts')),
+        hint ? h('p', { className: 'prw-panel-hint' }, hint) : null,
       )
     }
 
     function StatusDot({ status }) {
       return h('span', { className: `prw-dot prw-dot-${status || 'new'}`, 'aria-hidden': true })
+    }
+
+    function statusText(t, status) {
+      return status === 'ready' ? t('statusReady')
+        : status === 'analyzing' ? t('statusAnalyzing')
+          : status === 'error' ? t('statusError') : t('statusNew')
     }
 
     function Chip({ children, tone }) {
@@ -434,28 +672,18 @@ window.__ModuleLoader__.load({
           onDragLeave: () => setDrag(false),
           onDrop: (event) => { event.preventDefault(); event.stopPropagation(); setDrag(false); onDrop(event.dataTransfer.files) },
         },
-          h('div', { className: 'prw-drop-icon' }, h(Icon, { size: 44 })),
+          h('span', { className: 'prw-drop-icon' }, h(Icon, { size: 36 })),
           h('h2', null, busy ? t('uploading') : t('emptyTitle')),
           h('p', null, t('drop')),
           h('p', { className: 'prw-muted' }, t('paste')),
         ),
+        h('p', { className: 'prw-flow' }, `${t('step1')} · ${t('step2')} · ${t('step3')}`),
         h('p', { className: 'prw-footnote' }, t('emptyHint')),
-        h('div', { className: 'prw-steps' },
-          [
-            ['01', t('step1'), t('step1d')],
-            ['02', t('step2'), t('step2d')],
-            ['03', t('step3'), t('step3d')],
-          ].map(([number, title, detail]) => h('div', { className: 'prw-step', key: number },
-            h('span', { className: 'prw-step-num' }, number),
-            h('div', null, h('strong', null, title), h('p', null, detail)),
-          )),
-        ),
-        h('p', { className: 'prw-note' }, t('heightNote')),
       )
     }
 
-    function Metric({ label, value: metricValue, suffix }) {
-      return h('div', { className: 'prw-metric' },
+    function Stat({ label, value: metricValue, suffix }) {
+      return h('div', { className: 'prw-stat' },
         h('span', null, label),
         h('strong', null, value(metricValue, suffix || '')),
       )
@@ -466,10 +694,10 @@ window.__ModuleLoader__.load({
       const overrides = record.overrides || {}
       const [draft, setDraft] = React.useState(() => ({
         title: record.title || '',
-        height: overrides.height_cm ?? analysis.body?.height_cm ?? '',
-        head: overrides.head_units ?? analysis.body?.head_units ?? '',
-        age: overrides.age_range ?? analysis.age_range ?? '',
-        gender: overrides.gender ?? analysis.gender ?? 'unknown',
+        height: overrides.height_cm !== undefined ? overrides.height_cm : (analysis.body?.height_cm ?? ''),
+        head: overrides.head_units !== undefined ? overrides.head_units : (analysis.body?.head_units ?? ''),
+        age: overrides.age_range !== undefined ? overrides.age_range : (analysis.age_range ?? ''),
+        gender: overrides.gender !== undefined ? overrides.gender : (analysis.gender ?? 'unknown'),
         anatomyNote: overrides.anatomy_note ?? '',
       }))
       const [saving, setSaving] = React.useState(false)
@@ -479,10 +707,10 @@ window.__ModuleLoader__.load({
         const data = record.analysis || {}
         setDraft({
           title: record.title || '',
-          height: current.height_cm ?? data.body?.height_cm ?? '',
-          head: current.head_units ?? data.body?.head_units ?? '',
-          age: current.age_range ?? data.age_range ?? '',
-          gender: current.gender ?? data.gender ?? 'unknown',
+          height: current.height_cm !== undefined ? current.height_cm : (data.body?.height_cm ?? ''),
+          head: current.head_units !== undefined ? current.head_units : (data.body?.head_units ?? ''),
+          age: current.age_range !== undefined ? current.age_range : (data.age_range ?? ''),
+          gender: current.gender !== undefined ? current.gender : (data.gender ?? 'unknown'),
           anatomyNote: current.anatomy_note ?? '',
         })
       }, [record.id, record.updatedAt])
@@ -492,16 +720,18 @@ window.__ModuleLoader__.load({
       const save = async () => {
         setSaving(true)
         try {
-          const originalHeight = analysis.body?.height_cm ?? ''
-          const originalHead = analysis.body?.head_units ?? ''
-          const originalAge = analysis.age_range ?? ''
-          const originalGender = analysis.gender ?? 'unknown'
+          const current = record.overrides || {}
+          const data = record.analysis || {}
+          const currentHeight = current.height_cm !== undefined ? current.height_cm : (data.body?.height_cm ?? '')
+          const currentHead = current.head_units !== undefined ? current.head_units : (data.body?.head_units ?? '')
+          const currentAge = current.age_range !== undefined ? current.age_range : (data.age_range ?? '')
+          const currentGender = current.gender !== undefined ? current.gender : (data.gender ?? 'unknown')
           const payload = { id: record.id, overrides: {} }
-          if (String(draft.height) !== String(originalHeight)) payload.overrides.height_cm = draft.height === '' ? null : Number(draft.height)
-          if (String(draft.head) !== String(originalHead)) payload.overrides.head_units = draft.head === '' ? null : Number(draft.head)
-          if (draft.age !== originalAge) payload.overrides.age_range = draft.age
-          if (draft.gender !== originalGender) payload.overrides.gender = draft.gender
-          if (draft.anatomyNote !== (record.overrides?.anatomy_note || '')) payload.overrides.anatomy_note = draft.anatomyNote
+          if (String(draft.height) !== String(currentHeight)) payload.overrides.height_cm = draft.height === '' ? null : Number(draft.height)
+          if (String(draft.head) !== String(currentHead)) payload.overrides.head_units = draft.head === '' ? null : Number(draft.head)
+          if (draft.age !== currentAge) payload.overrides.age_range = draft.age
+          if (draft.gender !== currentGender) payload.overrides.gender = draft.gender
+          if (draft.anatomyNote !== (current.anatomy_note || '')) payload.overrides.anatomy_note = draft.anatomyNote
           if (draft.title.trim() && draft.title.trim() !== record.title) payload.title = draft.title.trim()
           const out = await post('update', payload)
           onUpdated(out.record)
@@ -513,15 +743,7 @@ window.__ModuleLoader__.load({
         }
       }
 
-      return h('section', { className: 'prw-card' },
-        h('header', { className: 'prw-card-head' },
-          h('div', null,
-            h('h3', null, t('correction')),
-            h('p', { className: 'prw-card-hint' }, t('correctionHint')),
-          ),
-          h('button', { type: 'button', className: 'prw-btn prw-btn-primary prw-btn-sm', onClick: save, disabled: saving },
-            saving ? t('saving') : t('save')),
-        ),
+      return h('div', { className: 'prw-form-wrap' },
         h('div', { className: 'prw-form' },
           h('label', { className: 'prw-field' }, h('span', null, t('titleField')),
             h('input', { className: 'prw-input', value: draft.title, onChange: update('title'), maxLength: 60 })),
@@ -541,6 +763,11 @@ window.__ModuleLoader__.load({
           h('label', { className: 'prw-field prw-field-wide' }, h('span', null, t('anatomyNote')),
             h('textarea', { className: 'prw-input prw-textarea', rows: 3, value: draft.anatomyNote, placeholder: t('anatomyNoteHint'), onChange: update('anatomyNote') })),
         ),
+        h('div', { className: 'prw-form-foot' },
+          h('p', { className: 'prw-muted' }, t('correctionHint')),
+          h('button', { type: 'button', className: 'prw-btn prw-btn-primary prw-btn-sm', onClick: save, disabled: saving },
+            saving ? t('saving') : t('save')),
+        ),
       )
     }
 
@@ -552,7 +779,7 @@ window.__ModuleLoader__.load({
       const toggle = async () => {
         if (open) return setOpen(false)
         try {
-          const out = await api(`record?id=${encodeURIComponent(record.id)}`)
+          const out = await api(`record?id=${encodeURIComponent(record.id)}&include_raw=1`)
           setRaw(out.raw || '')
           setOpen(true)
         } catch (e) {
@@ -566,263 +793,305 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function MobileCard({ record, t, onNotice }) {
-      const generated = (record.prompts && (record.prompts.mobile_zh || record.prompts.compact_zh || record.prompts.full_zh)) || ''
-      const [text, setText] = React.useState(generated)
-      React.useEffect(() => { setText(generated) }, [record.id, record.updatedAt])
-      return h('section', { className: 'prw-card prw-mobile' },
-        h('header', { className: 'prw-card-head' },
-          h('div', null,
-            h('h3', null, t('mobileTitle')),
-            h('p', { className: 'prw-card-hint' }, t('mobileHint')),
-          ),
-          h(CopyButton, { text, t, onNotice, label: t('copyMobile') }),
-        ),
-        h('textarea', {
-          className: 'prw-mobile-input',
-          value: text,
-          onChange: (event) => setText(event.target.value),
-          rows: 5,
-          spellCheck: false,
-        }),
-        h('div', { className: 'prw-mobile-foot' },
-          h('span', null, `${text.length} 字`),
-          h('button', { type: 'button', className: 'prw-link', onClick: () => setText(generated) }, t('resetMobile')),
-        ),
-        h('p', { className: 'prw-muted' }, (record.prompts && record.prompts.mobile_note_zh) || t('mobileNote')),
-      )
-    }
-
     function RecordView({ record, t, onAnalyze, onDelete, onExport, onCopyAll, onUpdated, onNotice, busy }) {
       const analysis = record.analysis || {}
       const prompts = record.prompts || null
-      const params = record.params || (prompts && prompts.params) || null
+      const params = record.params || null
       const overrides = record.overrides || {}
       const body = analysis.body || {}
       const proportions = analysis.proportions || {}
-      const camera = analysis.camera || {}
-      const effectiveHeight = overrides.height_cm ?? body.height_cm
-      const effectiveHead = overrides.head_units ?? body.head_units
-      const effectiveAge = overrides.age_range || analysis.age_range
-      const effectiveGender = overrides.gender || analysis.gender
+      const face = analysis.face || {}
+      const technical = analysis.technical || {}
+      const [viewer, setViewer] = React.useState(false)
+      const [menu, setMenu] = React.useState(false)
+
+      React.useEffect(() => { setMenu(false); setViewer(false) }, [record.id])
+      React.useEffect(() => {
+        if (!viewer) return undefined
+        const onKey = (event) => { if (event.key === 'Escape') setViewer(false) }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [viewer])
+
+      const effectiveHeight = overrides.height_cm !== undefined ? overrides.height_cm : body.height_cm
+      const effectiveHead = overrides.head_units !== undefined ? overrides.head_units : body.head_units
+      const effectiveAge = overrides.age_range !== undefined ? overrides.age_range : analysis.age_range
+      const effectiveGender = overrides.gender !== undefined ? overrides.gender : analysis.gender
       const genderLabel = effectiveGender === 'female' ? t('genderFemale')
         : effectiveGender === 'male' ? t('genderMale')
           : effectiveGender === 'androgynous' ? t('genderAndrogynous') : t('genderUnknown')
+      const genderMeta = effectiveGender && effectiveGender !== 'unknown' ? genderLabel : ''
+      const analyzing = record.status === 'analyzing'
+      const showResult = Boolean(prompts) && !analyzing
+      const imageUrl = `${API}/image?record=${encodeURIComponent(record.id)}`
+
+      const metricCandidates = [
+        [t('headUnits'), effectiveHead],
+        [t('faceRatio'), proportions.face_width_height_ratio],
+        [t('waistHip'), proportions.waist_hip_ratio],
+        [t('legBody'), proportions.leg_body_ratio],
+        [t('height'), effectiveHeight, ' cm'],
+        [t('shoulderHead'), body.shoulder_width_head_units],
+        [t('ipd'), proportions.interpupillary_face_ratio],
+        [t('noseRatio'), proportions.nose_width_face_ratio],
+        [t('mouthRatio'), proportions.mouth_width_face_ratio],
+        [t('shoulderHip'), proportions.shoulder_hip_ratio],
+        [t('bodyFat'), body.body_fat_percent, '%'],
+      ].filter(([, metricValue]) => metricValue !== null && metricValue !== undefined && metricValue !== '')
+      const primaryMetrics = metricCandidates.slice(0, 4)
+
+      const faceRows = [
+        [t('faceShape'), face.face_shape_zh],
+        [t('eyes'), face.eyes_zh],
+        [t('nose'), face.nose_zh],
+        [t('lips'), face.lips_zh],
+        [t('skin'), face.skin_zh],
+        [t('hair'), face.hair_zh],
+        [t('marks'), face.marks_zh],
+        [t('facialHair'), face.facial_hair_zh],
+        [t('moles'), face.moles_zh],
+        [t('scars'), face.scars_zh],
+        [t('freckles'), face.freckles_zh],
+        [t('birthmarks'), face.birthmarks_zh],
+        [t('piercings'), face.piercings_zh],
+        [t('tattoos'), face.tattoos_zh],
+        [t('makeup'), face.makeup_zh],
+        [t('teeth'), face.teeth_zh],
+        [t('gaze'), face.gaze_zh],
+        [t('skinDetails'), face.skin_details_zh],
+        [t('expressionHint'), face.expression_zh],
+      ].filter(([, rowValue]) => rowValue)
+
+      const bodyRows = [
+        [t('height'), effectiveHeight ? `${effectiveHeight} cm` : ''],
+        [t('heightRange'), Array.isArray(body.height_range_cm) && body.height_range_cm.length === 2 ? `${body.height_range_cm[0]}–${body.height_range_cm[1]} cm` : ''],
+        [t('headUnits'), effectiveHead],
+        [t('shoulderHead'), body.shoulder_width_head_units],
+        [t('bodyFat'), body.body_fat_percent ? `${body.body_fat_percent}%` : ''],
+        [t('heightMethod'), body.height_method_zh],
+      ].filter(([, rowValue]) => rowValue)
+
+      const sceneRows = [
+        [t('ethnicity'), [analysis.ethnicity_zh, analysis.face_structure_zh].filter(Boolean).join('；')],
+        [t('wardrobe'), analysis.wardrobe_zh],
+        [t('scene'), analysis.scene_zh],
+        [t('cameraAngle'), analysis.camera_zh],
+        [t('lighting'), analysis.lighting_zh],
+        [t('style'), analysis.style_zh],
+      ].filter(([, rowValue]) => rowValue)
+
+      const techRows = [
+        [t('medium'), technical.medium_zh],
+        [t('camera'), technical.camera_zh],
+        [t('lens'), technical.lens_zh],
+        [t('aperture'), technical.aperture],
+        [t('iso'), technical.iso],
+        [t('shutter'), technical.shutter],
+        [t('focal'), technical.focal_length_mm],
+        [t('grain'), technical.grain_zh],
+        [t('skinTexture'), technical.skin_texture_zh],
+        [t('colorGrade'), technical.color_grade_zh],
+        [t('dof'), technical.depth_of_field_zh],
+        [t('quality'), technical.quality_zh],
+      ].filter(([, rowValue]) => rowValue !== null && rowValue !== undefined && rowValue !== '')
+
+      const paramBits = []
+      if (params) {
+        if (params.width && params.height) paramBits.push(`${params.width}×${params.height}`)
+        if (params.aspect_ratio) paramBits.push(params.aspect_ratio)
+        if (params.steps) paramBits.push(`steps ${params.steps}`)
+        if (params.guidance) paramBits.push(`guidance ${params.guidance}`)
+        if (params.seed) paramBits.push(`seed ${params.seed}`)
+      }
+
+      const components = [
+        [t('identityZh'), prompts && prompts.identity_zh],
+        [t('identityEn'), prompts && prompts.identity_en],
+        [t('faceDetails'), prompts && prompts.face_details_zh],
+        [t('expressionHint'), prompts && prompts.expression_hint_zh],
+        [t('qualityLock'), prompts && prompts.quality_lock_zh],
+        [t('anatomyPrompt'), prompts && prompts.anatomy_prompt_zh],
+        [t('compact'), prompts && prompts.compact_zh],
+      ].filter(([, text]) => text)
+
+      const kv = (label, rowValue) => rowValue
+        ? h('div', { className: 'prw-kv', key: label }, h('span', null, label), h('p', null, value(rowValue)))
+        : null
+      const kvGroup = (label, rows) => rows.length
+        ? h('div', { className: 'prw-kv-group', key: label },
+          h('h4', null, label),
+          h('div', { className: 'prw-kv-grid' }, rows.map(([rowLabel, rowValue]) => kv(rowLabel, rowValue))))
+        : null
 
       return h('div', { className: 'prw-detail' },
         h('section', { className: 'prw-hero' },
-          h('div', { className: 'prw-hero-image' },
-            h('img', { src: `${API}/image?record=${encodeURIComponent(record.id)}`, alt: t('imageAlt') }),
+          h('div', { className: 'prw-hero-media' },
+            h('button', {
+              type: 'button',
+              className: 'prw-hero-image',
+              onClick: () => setViewer(true),
+              title: t('viewFull'),
+            }, h('img', { src: imageUrl, alt: t('imageAlt') })),
+            record.image ? h('span', { className: 'prw-image-cap' }, `${record.image.width}×${record.image.height}`) : null,
           ),
           h('div', { className: 'prw-hero-meta' },
             h('div', { className: 'prw-hero-title' },
               h('h2', null, record.title || '—'),
-              h(StatusDot, { status: record.status }),
-              h('span', { className: `prw-status-text prw-status-${record.status}` },
-                record.status === 'ready' ? t('statusReady')
-                  : record.status === 'analyzing' ? t('statusAnalyzing')
-                    : record.status === 'error' ? t('statusError') : t('statusNew')),
+              h('span', { className: `prw-status-pill prw-status-${record.status}` },
+                h(StatusDot, { status: record.status }),
+                statusText(t, record.status),
+              ),
             ),
-            h('div', { className: 'prw-badges' },
-              record.provider ? h(Chip, null, `${record.provider}/${record.model}${record.effort ? ` · ${record.effort}` : ''}`) : null,
-              effectiveAge ? h(Chip, null, effectiveAge) : null,
-              h(Chip, null, genderLabel),
-              h(Chip, null, formatDate(record.createdAt)),
-              record.image ? h(Chip, null, `${record.image.width}×${record.image.height}`) : null,
-            ),
+            (effectiveAge || genderMeta)
+              ? h('p', { className: 'prw-hero-sub' }, [effectiveAge, genderMeta].filter(Boolean).join(' · '))
+              : null,
             analysis.summary_zh ? h('p', { className: 'prw-summary' }, analysis.summary_zh) : null,
             h('div', { className: 'prw-actions' },
-              h('button', {
-                type: 'button',
-                className: 'prw-btn prw-btn-primary',
-                onClick: () => onAnalyze(record),
-                disabled: busy || record.status === 'analyzing',
-              }, record.status === 'error' ? t('retry') : record.status === 'ready' ? t('retry') : t('analyze')),
-              h('button', { type: 'button', className: 'prw-btn', onClick: () => onCopyAll(record), disabled: !prompts }, t('copyAll')),
-              h('button', { type: 'button', className: 'prw-btn', onClick: () => onExport(record), disabled: !analysis }, t('export')),
-              h('button', { type: 'button', className: 'prw-btn prw-btn-danger', onClick: () => onDelete(record), disabled: busy }, t('delete')),
+              record.status === 'ready' && prompts && prompts.full_zh
+                ? h(CopyButton, {
+                  text: prompts.full_zh,
+                  t,
+                  onNotice,
+                  label: t('copyMain'),
+                  variant: 'primary',
+                })
+                : h('button', {
+                  type: 'button',
+                  className: 'prw-btn prw-btn-primary',
+                  onClick: () => onAnalyze(record),
+                  disabled: busy || analyzing,
+                }, analyzing ? t('statusAnalyzing') : (record.status === 'error' ? t('retry') : t('analyze'))),
+              h('div', { className: 'prw-menu-wrap' },
+                h('button', {
+                  type: 'button',
+                  className: 'prw-btn prw-icon-btn',
+                  'aria-label': t('more'),
+                  onClick: () => setMenu((open) => !open),
+                }, '⋯'),
+                menu ? h('div', { className: 'prw-menu' },
+                  h('button', {
+                    type: 'button',
+                    disabled: !prompts,
+                    onClick: () => { setMenu(false); onCopyAll(record) },
+                  }, t('copyAll')),
+                  h('button', {
+                    type: 'button',
+                    disabled: !record.analysis,
+                    onClick: () => { setMenu(false); onExport(record) },
+                  }, t('export')),
+                  h('button', {
+                    type: 'button',
+                    disabled: busy || analyzing,
+                    onClick: () => { setMenu(false); onAnalyze(record) },
+                  }, t('retry')),
+                  h('button', {
+                    type: 'button',
+                    className: 'is-danger',
+                    disabled: busy,
+                    onClick: () => { setMenu(false); onDelete(record) },
+                  }, t('delete')),
+                ) : null,
+              ),
             ),
-            h('p', { className: 'prw-muted prw-hero-hint' }, t('fitHint')),
           ),
         ),
 
-        record.status === 'analyzing' ? h('section', { className: 'prw-card prw-progress' },
+        showResult && analysis.warnings_zh && analysis.warnings_zh.length
+          ? h('div', { className: 'prw-warning-strip' }, analysis.warnings_zh.join(' · '))
+          : null,
+
+        analyzing ? h('section', { className: 'prw-progress' },
           h('div', { className: 'prw-progress-bar' }, h('span', null)),
           h('p', null, t('analyzingHint')),
           record.provider ? h('p', { className: 'prw-muted' }, `${t('model')}: ${record.provider}/${record.model}`) : null,
         ) : null,
 
-        record.status === 'error' ? h('section', { className: 'prw-card prw-error-box' },
+        record.status === 'error' ? h('section', { className: 'prw-error-box' },
           h('h3', null, t('errorTitle')),
           h('p', null, record.error || '—'),
           h('p', { className: 'prw-muted' }, t('retryHint')),
         ) : null,
 
-        record.status === 'ready' && prompts ? h(React.Fragment, null,
-          h('div', { className: 'prw-best' },
-            h('strong', null, t('bestPathTitle')),
-            h('span', null, t('bestPath')),
-          ),
-          h(MobileCard, { record, t, onNotice }),
-          h('div', { className: 'prw-prompt-grid' },
-            h(PromptCard, { title: t('mainZh'), text: prompts.full_zh, t, onNotice }),
-            h(PromptCard, { title: t('mainEn'), text: prompts.full_en, t, onNotice }),
-            h(PromptCard, { title: t('identityZh'), text: prompts.identity_zh, t, onNotice }),
-            h(PromptCard, { title: t('identityEn'), text: prompts.identity_en, t, onNotice }),
-            h(PromptCard, { title: t('referenceEdit'), hint: t('referenceEditHint'), text: prompts.reference_edit_zh, t, onNotice }),
-            prompts.reference_edit_generic_zh ? h(PromptCard, { title: t('referenceEditGeneric'), hint: t('referenceEditGenericHint'), text: prompts.reference_edit_generic_zh, t, onNotice }) : null,
-            h(PromptCard, { title: t('negative'), text: prompts.negative_zh, t, onNotice }),
-            prompts.face_details_zh ? h(PromptCard, { title: t('faceDetails'), text: prompts.face_details_zh, t, onNotice }) : null,
-            prompts.expression_hint_zh ? h(PromptCard, { title: t('expressionHint'), text: prompts.expression_hint_zh, t, onNotice }) : null,
-            prompts.identity_sheet_zh ? h(PromptCard, { title: t('sheet'), hint: t('sheetHint'), text: prompts.identity_sheet_zh, t, onNotice }) : null,
-            h(PromptCard, { title: t('compact'), text: prompts.compact_zh, t, onNotice }),
-            prompts.quality_lock_zh ? h(PromptCard, { title: t('qualityLock'), text: prompts.quality_lock_zh, t, onNotice }) : null,
-            prompts.anatomy_prompt_zh ? h(PromptCard, { title: t('anatomyPrompt'), text: prompts.anatomy_prompt_zh, t, onNotice }) : null,
-          ),
+        showResult && primaryMetrics.length
+          ? h('div', { className: 'prw-metrics-primary' },
+            primaryMetrics.map(([label, metricValue, suffix], index) =>
+              h(Stat, { key: `${label}-${index}`, label, value: metricValue, suffix })))
+          : null,
 
-          h('section', { className: 'prw-card' },
-            h('header', { className: 'prw-card-head' },
-              h('div', null,
-                h('h3', null, t('identityCard')),
-                h('p', { className: 'prw-card-hint' }, t('locks')),
-              ),
-              h('div', { className: 'prw-chip-row' },
-                h(Chip, { tone: 'ok' }, `${t('confidence')} ${analysis.confidence?.face || '—'} / ${analysis.confidence?.body || '—'} / ${analysis.confidence?.height || '—'}`),
-              ),
-            ),
-            h('div', { className: 'prw-metrics' },
-              h(Metric, { label: t('height'), value: effectiveHeight, suffix: ' cm' }),
-              h(Metric, { label: t('heightRange'), value: Array.isArray(body.height_range_cm) && body.height_range_cm.length === 2 ? `${body.height_range_cm[0]}–${body.height_range_cm[1]}` : null }),
-              h(Metric, { label: t('headUnits'), value: effectiveHead }),
-              h(Metric, { label: t('faceRatio'), value: proportions.face_width_height_ratio }),
-              h(Metric, { label: t('ipd'), value: proportions.interpupillary_face_ratio }),
-              h(Metric, { label: t('noseRatio'), value: proportions.nose_width_face_ratio }),
-              h(Metric, { label: t('mouthRatio'), value: proportions.mouth_width_face_ratio }),
-              h(Metric, { label: t('shoulderHead'), value: body.shoulder_width_head_units }),
-              h(Metric, { label: t('shoulderHip'), value: proportions.shoulder_hip_ratio }),
-              h(Metric, { label: t('waistHip'), value: proportions.waist_hip_ratio }),
-              h(Metric, { label: t('legBody'), value: proportions.leg_body_ratio }),
-              h(Metric, { label: t('bodyFat'), value: body.body_fat_percent, suffix: '%' }),
-            ),
-            h('div', { className: 'prw-locks' },
-              (prompts.locks_zh || []).map((lock, index) => h(Chip, { key: index }, lock)),
-            ),
-            h('div', { className: 'prw-face-grid' },
-              h('div', null, h('span', { className: 'prw-label' }, t('face')),
-                h('p', null, analysis.face?.face_shape_zh || '—'),
-                h('p', null, analysis.face?.eyes_zh || ''),
-                h('p', null, analysis.face?.nose_zh || ''),
-                h('p', null, analysis.face?.lips_zh || ''),
-                h('p', null, analysis.face?.skin_zh || ''),
-                h('p', null, analysis.face?.hair_zh || ''),
-                analysis.face?.marks_zh ? h('p', null, analysis.face.marks_zh) : null,
-                analysis.face?.facial_hair_zh ? h('p', null, `${t('facialHair')}：${analysis.face.facial_hair_zh}`) : null,
-                analysis.face?.moles_zh ? h('p', null, `${t('moles')}：${analysis.face.moles_zh}`) : null,
-                analysis.face?.scars_zh ? h('p', null, `${t('scars')}：${analysis.face.scars_zh}`) : null,
-                analysis.face?.freckles_zh ? h('p', null, `${t('freckles')}：${analysis.face.freckles_zh}`) : null,
-                analysis.face?.birthmarks_zh ? h('p', null, `${t('birthmarks')}：${analysis.face.birthmarks_zh}`) : null,
-                analysis.face?.piercings_zh ? h('p', null, `${t('piercings')}：${analysis.face.piercings_zh}`) : null,
-                analysis.face?.tattoos_zh ? h('p', null, `${t('tattoos')}：${analysis.face.tattoos_zh}`) : null,
-                analysis.face?.makeup_zh ? h('p', null, `${t('makeup')}：${analysis.face.makeup_zh}`) : null,
-                analysis.face?.teeth_zh ? h('p', null, `${t('teeth')}：${analysis.face.teeth_zh}`) : null,
-                analysis.face?.gaze_zh ? h('p', null, `${t('gaze')}：${analysis.face.gaze_zh}`) : null,
-                analysis.face?.skin_details_zh ? h('p', null, `${t('skinDetails')}：${analysis.face.skin_details_zh}`) : null,
-                analysis.face?.expression_zh ? h('p', { className: 'prw-muted' }, `${t('expressionHint')}：${analysis.face.expression_zh}`) : null,
-              ),
-              h('div', null, h('span', { className: 'prw-label' }, t('body')),
-                h('p', null, analysis.body_zh || '—'),
-                body.height_method_zh ? h('p', { className: 'prw-muted' }, `${t('heightRange')}: ${body.height_method_zh}`) : null,
-                h('p', { className: 'prw-muted' }, `${t('height')}: ${effectiveHeight || '—'} cm · ${t('headUnits')}: ${effectiveHead || '—'}`),
-              ),
-            ),
-            h('div', { className: 'prw-facts' },
-              analysis.ethnicity_zh || analysis.face_structure_zh
-                ? h('p', null, h('strong', null, `${t('ethnicity')} · `), [analysis.ethnicity_zh, analysis.face_structure_zh].filter(Boolean).join('；'))
-                : null,
-              analysis.wardrobe_zh ? h('p', null, h('strong', null, `${t('wardrobe')} · `), analysis.wardrobe_zh) : null,
-              analysis.scene_zh ? h('p', null, h('strong', null, `${t('camera')} · `), analysis.scene_zh) : null,
-              analysis.camera_zh ? h('p', null, h('strong', null, `${t('camera')} · `), analysis.camera_zh) : null,
-              analysis.lighting_zh ? h('p', null, h('strong', null, `${t('lighting')} · `), analysis.lighting_zh) : null,
-              analysis.style_zh ? h('p', null, h('strong', null, `${t('style')} · `), analysis.style_zh) : null,
-            ),
-            analysis.warnings_zh && analysis.warnings_zh.length
-              ? h('div', { className: 'prw-warning' },
-                h('strong', null, `${t('warnings')}: `),
-                analysis.warnings_zh.join(' · '))
+        showResult && prompts ? h(PromptPanel, { record, prompts, t, onNotice }) : null,
+
+        showResult && components.length
+          ? h('details', { className: 'prw-section' },
+            h('summary', null, t('componentsSection')),
+            h('div', { className: 'prw-section-body prw-blocks' },
+              components.map(([label, text]) => h(PromptBlock, { key: label, title: label, text, t, onNotice }))),
+          )
+          : null,
+
+        showResult ? h('details', { className: 'prw-section' },
+          h('summary', null,
+            t('identitySection'),
+            (effectiveAge || genderLabel) ? h('span', { className: 'prw-summary-meta' }, [effectiveAge, genderLabel].filter(Boolean).join(' · ')) : null,
+          ),
+          h('div', { className: 'prw-section-body' },
+            faceRows.length ? kvGroup(t('face'), faceRows) : null,
+            bodyRows.length || analysis.body_zh
+              ? h('div', { className: 'prw-kv-group' },
+                h('h4', null, t('body')),
+                analysis.body_zh ? h('p', { className: 'prw-paragraph' }, analysis.body_zh) : null,
+                h('div', { className: 'prw-kv-grid' }, bodyRows.map(([rowLabel, rowValue]) => kv(rowLabel, rowValue))))
               : null,
-          ),
-
-          h(CorrectionForm, { record, t, onUpdated, onNotice }),
-
-          h('section', { className: 'prw-card' },
-            h('header', { className: 'prw-card-head' },
-              h('div', null,
-                h('h3', null, t('params')),
-                h('p', { className: 'prw-card-hint' }, params ? params.note_zh : ''),
-              ),
-            ),
-            params ? h('div', { className: 'prw-metrics prw-metrics-4' },
-              h(Metric, { label: t('size'), value: `${params.width}×${params.height}` }),
-              h(Metric, { label: t('steps'), value: params.steps }),
-              h(Metric, { label: t('guidance'), value: params.guidance }),
-              h(Metric, { label: t('scheduler'), value: params.scheduler }),
-              h(Metric, { label: t('seed'), value: params.seed ?? t('seedHint') }),
-              h(Metric, { label: t('camera'), value: camera.aspect_ratio || params.aspect_ratio || '—' }),
-            ) : h('p', { className: 'prw-muted' }, t('noPrompts')),
-            h('div', { className: 'prw-two-col' },
-              h('div', null,
-                h('h4', null, t('rules')),
-                h('ul', { className: 'prw-list' }, (prompts.rules_zh || []).map((rule, index) => h('li', { key: index }, rule))),
-              ),
-              h('div', null,
-                h('h4', null, t('drift')),
-                h('ul', { className: 'prw-list' }, (prompts.drift_fixes || []).map((item, index) => h('li', { key: index },
-                  h('strong', null, `${item.symptom}：`), item.fix))),
-              ),
-            ),
-          ),
-
-          h('section', { className: 'prw-card' },
-            h('header', { className: 'prw-card-head' },
-              h('div', null,
-                h('h3', null, t('technical')),
-                h('p', { className: 'prw-card-hint' }, analysis.technical?.quality_zh || ''),
-              ),
-            ),
-            h('div', { className: 'prw-metrics' },
-              h(Metric, { label: t('medium'), value: analysis.technical?.medium_zh }),
-              h(Metric, { label: t('camera'), value: analysis.technical?.camera_zh }),
-              h(Metric, { label: t('lens'), value: analysis.technical?.lens_zh }),
-              h(Metric, { label: t('aperture'), value: analysis.technical?.aperture }),
-              h(Metric, { label: t('iso'), value: analysis.technical?.iso }),
-              h(Metric, { label: t('shutter'), value: analysis.technical?.shutter }),
-              h(Metric, { label: t('focal'), value: analysis.technical?.focal_length_mm, suffix: ' mm' }),
-              h(Metric, { label: t('grain'), value: analysis.technical?.grain_zh }),
-              h(Metric, { label: t('skinTexture'), value: analysis.technical?.skin_texture_zh }),
-              h(Metric, { label: t('colorGrade'), value: analysis.technical?.color_grade_zh }),
-              h(Metric, { label: t('dof'), value: analysis.technical?.depth_of_field_zh }),
-              h(Metric, { label: t('quality'), value: analysis.technical?.quality_zh }),
-            ),
-          ),
-
-          h('section', { className: 'prw-card' },
-            h('div', { className: 'prw-two-col' },
-              h('div', null,
-                h('h4', null, t('beforeCheck')),
-                h('ul', { className: 'prw-checklist' }, ['pre1', 'pre2', 'pre3', 'pre4', 'pre5', 'pre6'].map((key) => h('li', { key }, t(key)))),
-              ),
-              h('div', null,
-                h('h4', null, t('afterCheck')),
-                h('ul', { className: 'prw-checklist' }, ['post1', 'post2', 'post3', 'post4', 'post5', 'post6'].map((key) => h('li', { key }, t(key)))),
-              ),
-            ),
-            h(RawView, { record, t }),
+            sceneRows.length ? kvGroup(t('scene'), sceneRows) : null,
+            prompts && prompts.locks_zh && prompts.locks_zh.length
+              ? h('div', { className: 'prw-kv-group' },
+                h('h4', null, t('locks')),
+                h('div', { className: 'prw-chips' }, prompts.locks_zh.map((lock, index) => h(Chip, { key: index }, lock))))
+              : null,
           ),
         ) : null,
 
-        record.status === 'new' ? h('section', { className: 'prw-card prw-error-box' },
-          h('h3', null, t('noAnalysis')),
-          h('p', { className: 'prw-muted' }, t('retryHint')),
+        showResult && record.analysis ? h('details', { className: 'prw-section' },
+          h('summary', null, t('correction')),
+          h('div', { className: 'prw-section-body' },
+            h(CorrectionForm, { record, t, onUpdated, onNotice })),
+        ) : null,
+
+        showResult && prompts && ((prompts.rules_zh && prompts.rules_zh.length) || (prompts.drift_fixes && prompts.drift_fixes.length))
+          ? h('details', { className: 'prw-section' },
+            h('summary', null, t('reproduceSection')),
+            h('div', { className: 'prw-section-body prw-two-col' },
+              h('div', null,
+                h('h4', null, t('rules')),
+                h('ul', { className: 'prw-list' }, (prompts.rules_zh || []).map((rule, index) => h('li', { key: index }, rule)))),
+              h('div', null,
+                h('h4', null, t('drift')),
+                h('ul', { className: 'prw-list' }, (prompts.drift_fixes || []).map((item, index) => h('li', { key: index },
+                  h('strong', null, `${item.symptom}：`), item.fix)))),
+            ),
+          )
+          : null,
+
+        showResult ? h('details', { className: 'prw-section' },
+          h('summary', null, t('technical')),
+          h('div', { className: 'prw-section-body' },
+            techRows.length ? h('div', { className: 'prw-kv-grid' }, techRows.map(([label, rowValue]) => kv(label, rowValue))) : null,
+            paramBits.length ? h('p', { className: 'prw-muted' }, paramBits.join(' · ')) : null,
+            h(RawView, { record, t })),
+        ) : null,
+
+        viewer ? h('div', {
+          className: 'prw-lightbox',
+          role: 'dialog',
+          'aria-modal': 'true',
+          onClick: () => setViewer(false),
+        },
+          h('img', { src: imageUrl, alt: t('imageAlt') }),
+          h('button', {
+            type: 'button',
+            className: 'prw-lightbox-close',
+            onClick: () => setViewer(false),
+            'aria-label': t('close'),
+          }, '×'),
         ) : null,
       )
     }
@@ -835,12 +1104,15 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = React.useState('')
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
+      const [query, setQuery] = React.useState('')
       const inputRef = React.useRef(null)
 
-      const refresh = React.useCallback(async () => {
+      const refresh = React.useCallback(async (id) => {
         try {
-          const next = await api('state')
+          const suffix = id ? `?selected=${encodeURIComponent(id)}` : ''
+          const next = await api(`state${suffix}`)
           setState(next)
+          if (!id && next.selected && next.selected.id) setSelectedId(next.selected.id)
           setError('')
           return next
         } catch (e) {
@@ -853,9 +1125,9 @@ window.__ModuleLoader__.load({
       const hasAnalyzing = state.records.some((record) => record.status === 'analyzing')
       React.useEffect(() => {
         if (!hasAnalyzing) return undefined
-        const timer = window.setInterval(() => { void refresh() }, 1800)
+        const timer = window.setInterval(() => { void refresh(selectedId) }, 1800)
         return () => window.clearInterval(timer)
-      }, [hasAnalyzing, refresh])
+      }, [hasAnalyzing, refresh, selectedId])
 
       const notify = React.useCallback((message) => {
         setNotice(message)
@@ -876,10 +1148,10 @@ window.__ModuleLoader__.load({
         setBusy('upload')
         setError('')
         try {
-          const data = await readFileBase64(file)
-          const out = await post('upload', { data, mediaType, name: file.name || 'upload' })
+          const prepared = await prepareUpload(file)
+          const out = await post('upload', prepared)
           setSelectedId(out.record.id)
-          await refresh()
+          await refresh(out.record.id)
         } catch (e) {
           setError(e.message)
         } finally {
@@ -901,7 +1173,11 @@ window.__ModuleLoader__.load({
         return () => window.removeEventListener('paste', onPaste)
       }, [uploadFile])
 
-      const selected = state.records.find((record) => record.id === selectedId) || state.records[0] || null
+      const selected = state.selected || null
+      const needle = query.trim().toLowerCase()
+      const visibleRecords = needle
+        ? state.records.filter((record) => String(record.title || '').toLowerCase().includes(needle))
+        : state.records
 
       const pick = () => inputRef.current && inputRef.current.click()
 
@@ -914,7 +1190,7 @@ window.__ModuleLoader__.load({
         setError('')
         try {
           await post('analyze', { id: record.id })
-          await refresh()
+          await refresh(record.id)
         } catch (e) {
           setError(e.message)
         } finally {
@@ -967,12 +1243,19 @@ window.__ModuleLoader__.load({
       const updateRecord = (next) => {
         setState((prev) => ({
           ...prev,
+          selected: prev.selected && prev.selected.id === next.id ? next : prev.selected,
           records: prev.records.map((record) => (record.id === next.id ? next : record)),
         }))
       }
 
+      const selectRecord = (id) => {
+        setSelectedId(id)
+        void refresh(id)
+      }
+
       const vision = state.vision
-      const visionText = vision ? `${vision.provider}/${vision.model}${vision.effort ? ` · ${vision.effort}` : ''}` : t('notRun')
+      const visionText = vision ? `${vision.model}${vision.effort ? ` · ${vision.effort}` : ''}` : t('notRun')
+      const visionTitle = vision ? `${vision.provider}/${vision.model}` : t('model')
 
       return h('div', {
         className: 'prw-root',
@@ -983,17 +1266,22 @@ window.__ModuleLoader__.load({
         h('style', null, css),
         h('header', { className: 'prw-head' },
           h('div', { className: 'prw-brand' },
-            h('span', { className: 'prw-brand-icon' }, h(Icon, { size: 34 })),
-            h('div', null,
-              h('h1', null, t('title')),
-              h('p', null, t('subtitle')),
-            ),
+            h('span', { className: 'prw-brand-icon' }, h(Icon, { size: 26 })),
+            h('h1', null, t('title')),
           ),
           h('div', { className: 'prw-head-actions' },
-            h('span', { className: 'prw-vision', title: t('model') },
+            state.records.length
+              ? h('select', {
+                className: 'prw-record-select',
+                value: selected ? selected.id : '',
+                onChange: (event) => selectRecord(event.target.value),
+                'aria-label': t('records'),
+              }, state.records.map((record) => h('option', { key: record.id, value: record.id }, record.title || '—')))
+              : null,
+            vision ? h('span', { className: 'prw-vision', title: visionTitle },
               h('span', { className: 'prw-vision-dot' }),
               h('span', null, visionText),
-            ),
+            ) : null,
             h('button', { type: 'button', className: 'prw-btn prw-btn-primary', onClick: pick, disabled: busy === 'upload' },
               busy === 'upload' ? t('uploading') : `+ ${t('upload')}`),
             h('input', {
@@ -1016,28 +1304,35 @@ window.__ModuleLoader__.load({
           h('aside', { className: 'prw-rail' },
             h('div', { className: 'prw-rail-head' },
               h('span', null, t('records')),
-              h('span', { className: 'prw-muted' }, `${state.total || state.records.length} ${t('recordsTotal')}`),
+              h('span', { className: 'prw-rail-count' }, String(state.total || state.records.length)),
             ),
+            h('input', {
+              className: 'prw-search',
+              value: query,
+              placeholder: t('searchRecords'),
+              'aria-label': t('searchRecords'),
+              onChange: (event) => setQuery(event.target.value),
+            }),
             state.records.length === 0
               ? h('p', { className: 'prw-rail-empty' }, t('emptyRail'))
-              : state.records.map((record) => h('button', {
-                key: record.id,
-                type: 'button',
-                className: `prw-item${selected && selected.id === record.id ? ' is-active' : ''}`,
-                onClick: () => setSelectedId(record.id),
-              },
-                h('img', { src: `${API}/image?record=${encodeURIComponent(record.id)}`, alt: '', loading: 'lazy' }),
-                h('span', { className: 'prw-item-text' },
-                  h('span', { className: 'prw-item-title' }, record.title || '—'),
-                  h('span', { className: 'prw-item-sub' },
-                    h(StatusDot, { status: record.status }),
-                    record.status === 'ready' ? t('statusReady')
-                      : record.status === 'analyzing' ? t('statusAnalyzing')
-                        : record.status === 'error' ? t('statusError') : t('statusNew'),
-                    h('span', { className: 'prw-item-date' }, formatDate(record.createdAt)),
+              : visibleRecords.length === 0
+                ? h('p', { className: 'prw-rail-empty' }, t('noMatch'))
+                : visibleRecords.map((record) => h('button', {
+                  key: record.id,
+                  type: 'button',
+                  className: `prw-item${selected && selected.id === record.id ? ' is-active' : ''}`,
+                  title: `${statusText(t, record.status)} · ${formatDate(record.createdAt)}`,
+                  onClick: () => selectRecord(record.id),
+                },
+                  h('img', { src: `${API}/image?record=${encodeURIComponent(record.id)}&thumb=1`, alt: '', loading: 'lazy' }),
+                  h('span', { className: 'prw-item-text' },
+                    h('span', { className: 'prw-item-title' }, record.title || '—'),
+                    h('span', { className: 'prw-item-sub' },
+                      h(StatusDot, { status: record.status }),
+                      statusText(t, record.status),
+                    ),
                   ),
-                ),
-              )),
+                )),
           ),
           h('main', { className: 'prw-main' },
             selected ? h(RecordView, {
@@ -1081,126 +1376,160 @@ window.__ModuleLoader__.load({
     }
 
     const css = `
-.prw-root{height:100%;min-height:0;width:100%;min-width:0;display:flex;flex-direction:column;box-sizing:border-box;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-size:13px;padding-top:min(var(--dsh-frame-top-clearance,0px),28px);font-family:var(--ds-font-family,inherit);overflow:hidden}
+.prw-root{height:100%;min-height:0;width:100%;min-width:0;display:flex;flex-direction:column;box-sizing:border-box;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-size:14px;padding-top:min(var(--dsh-frame-top-clearance,0px),28px);font-family:var(--ds-font-family,inherit);overflow:hidden}
 .prw-root *{box-sizing:border-box}
-.prw-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 16px;padding:14px 20px 10px;flex:none;min-width:0}
-.prw-brand{display:flex;align-items:center;gap:12px;min-width:0;flex:1 1 240px}
-.prw-brand-icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-brand-primary)}
-.prw-brand h1{font-size:18px;line-height:24px;margin:0;font-weight:600;letter-spacing:.01em}
-.prw-brand p{margin:2px 0 0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:16px}
-.prw-head-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex:none;min-width:0;max-width:100%}
-.prw-vision{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 9px;border:1px solid var(--dsw-alias-border-l1);border-radius:999px;color:var(--dsw-alias-label-secondary);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prw-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;padding:10px 20px;flex:none;min-width:0}
+.prw-brand{display:flex;align-items:center;gap:9px;min-width:0;flex:1 1 auto}
+.prw-brand-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;color:var(--dsw-alias-brand-primary);flex:none}
+.prw-brand h1{font-size:15px;line-height:22px;margin:0;font-weight:600;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prw-head-actions{display:flex;align-items:center;gap:8px;min-width:0;flex:none;max-width:100%}
+.prw-vision{display:inline-flex;align-items:center;gap:6px;max-width:220px;padding:3px 8px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .prw-vision-dot{width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-success-primary);flex:none}
+.prw-record-select{display:none;height:28px;max-width:180px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;padding:0 8px}
 .prw-btn{appearance:none;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border-radius:8px;padding:6px 12px;font:inherit;font-size:12px;line-height:18px;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease}
 .prw-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
 .prw-btn:disabled{opacity:.45;cursor:not-allowed}
 .prw-btn-primary{background:var(--dsw-alias-button-primary-fill);border-color:transparent;color:var(--dsw-alias-label-primary-inverted)}
 .prw-btn-primary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover)}
-.prw-btn-danger{color:var(--dsw-alias-state-error-primary)}
 .prw-btn-sm{padding:4px 9px;font-size:11px;line-height:16px}
+.prw-icon-btn{padding:6px 10px;font-size:14px;line-height:16px;color:var(--dsw-alias-label-secondary)}
 .prw-file{display:none}
-.prw-error-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 24px 6px;padding:8px 12px;border:1px solid var(--dsw-alias-state-error-primary);border-radius:8px;color:var(--dsw-alias-state-error-primary);background:var(--dsw-alias-bg-layer-1);font-size:12px;flex:none}
+.prw-error-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 20px 6px;padding:8px 12px;border:1px solid var(--dsw-alias-state-error-primary);border-radius:8px;color:var(--dsw-alias-state-error-primary);background:var(--dsw-alias-bg-layer-1);font-size:12px;flex:none}
 .prw-body{display:flex;flex:1;min-height:0;min-width:0;border-top:1px solid var(--dsw-alias-border-l1);overflow:hidden}
-.prw-rail{width:220px;flex:none;border-right:1px solid var(--dsw-alias-border-l1);overflow:auto;padding:10px;display:flex;flex-direction:column;gap:4px}
-.prw-rail-head{display:flex;align-items:center;justify-content:space-between;padding:2px 6px 8px;color:var(--dsw-alias-label-secondary);font-size:11px;letter-spacing:.04em;text-transform:uppercase}
-.prw-rail-empty{color:var(--dsw-alias-label-dimmed);font-size:12px;line-height:18px;padding:10px 6px}
-.prw-item{display:flex;align-items:center;gap:10px;width:100%;padding:7px;border:none;border-radius:9px;background:transparent;color:inherit;text-align:left;cursor:pointer;font:inherit}
+.prw-rail{width:236px;flex:none;border-right:1px solid var(--dsw-alias-border-l1);overflow:auto;padding:8px;display:flex;flex-direction:column;gap:2px}
+.prw-rail-head{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 2px;color:var(--dsw-alias-label-secondary);font-size:11px}
+.prw-rail-count{font-size:10px;color:var(--dsw-alias-label-dimmed);font-variant-numeric:tabular-nums}
+.prw-search{width:100%;height:28px;margin:4px 0 6px;border:1px solid transparent;border-radius:7px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);padding:0 9px;font:inherit;font-size:12px;outline:none}
+.prw-search:focus{border-color:var(--dsw-alias-brand-primary)}
+.prw-search::placeholder{color:var(--dsw-alias-label-dimmed)}
+.prw-rail-empty{color:var(--dsw-alias-label-dimmed);font-size:12px;line-height:18px;padding:10px 6px;margin:0}
+.prw-item{display:flex;align-items:center;gap:9px;width:100%;padding:6px;border:none;border-radius:8px;background:transparent;color:inherit;text-align:left;cursor:pointer;font:inherit;min-width:0}
 .prw-item:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.prw-item.is-active{background:var(--dsw-alias-interactive-bg-hover)}
-.prw-item img{width:46px;height:46px;flex:none;object-fit:cover;border-radius:7px;background:var(--dsw-alias-bg-layer-2)}
-.prw-item-text{display:flex;flex-direction:column;gap:4px;min-width:0}
+.prw-item.is-active{background:var(--dsw-alias-bg-layer-2)}
+.prw-item img{width:40px;height:40px;flex:none;object-fit:cover;border-radius:6px;background:var(--dsw-alias-bg-layer-2)}
+.prw-item-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
 .prw-item-title{font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .prw-item-sub{display:flex;align-items:center;gap:5px;color:var(--dsw-alias-label-secondary);font-size:10px;line-height:14px;white-space:nowrap}
-.prw-item-date{margin-left:auto;color:var(--dsw-alias-label-dimmed)}
 .prw-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--dsw-alias-state-idle-primary)}
 .prw-dot-ready{background:var(--dsw-alias-state-success-primary)}
 .prw-dot-analyzing{background:var(--dsw-alias-state-warn-primary);animation:prw-pulse 1.2s ease-in-out infinite}
 .prw-dot-error{background:var(--dsw-alias-state-error-primary)}
 @keyframes prw-pulse{0%,100%{opacity:.35}50%{opacity:1}}
 .prw-main{flex:1;min-width:0;width:100%;max-width:100%;overflow:auto;padding:18px 20px 64px}
-.prw-empty{width:100%;max-width:820px;min-width:0;margin:20px auto 0;display:flex;flex-direction:column;gap:16px}
-.prw-drop{min-height:280px;border:1px dashed var(--dsw-alias-border-l3);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:28px;cursor:pointer;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease}
+.prw-empty{width:100%;max-width:520px;min-width:0;margin:48px auto 0;display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center}
+.prw-drop{width:100%;min-height:240px;border:1px dashed var(--dsw-alias-border-l3);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:24px;cursor:pointer;background:var(--dsw-alias-bg-layer-1);transition:border-color .15s ease,background .15s ease}
 .prw-drop:hover,.prw-drop.is-drag{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-interactive-bg-hover)}
-.prw-drop-icon{color:var(--dsw-alias-brand-primary);margin-bottom:6px}
-.prw-drop h2{margin:0;font-size:17px;font-weight:600}
+.prw-drop-icon{color:var(--dsw-alias-brand-primary);margin-bottom:4px;display:inline-flex}
+.prw-drop h2{margin:0;font-size:16px;font-weight:600}
 .prw-drop p{margin:0;color:var(--dsw-alias-label-secondary);font-size:12px}
-.prw-footnote{margin:0;color:var(--dsw-alias-label-dimmed);font-size:11px;text-align:center}
-.prw-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
-.prw-step{display:flex;gap:10px;padding:12px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
-.prw-step-num{font-family:var(--ds-font-family-code,monospace);font-size:11px;color:var(--dsw-alias-brand-primary);padding-top:1px}
-.prw-step strong{display:block;font-size:12px;line-height:16px}
-.prw-step p{margin:3px 0 0;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
-.prw-note{margin:0;padding:10px 12px;border-left:2px solid var(--dsw-alias-state-warn-primary);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px;background:var(--dsw-alias-bg-layer-1);border-radius:0 8px 8px 0}
-.prw-detail{width:100%;max-width:1080px;min-width:0;margin:0 auto;display:flex;flex-direction:column;gap:14px}
-.prw-hero{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;padding:16px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);min-width:0}
-.prw-hero-image{width:196px;flex:none;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:var(--dsw-alias-bg-layer-2)}
-.prw-hero-image img{width:100%;height:100%;object-fit:cover;display:block}
-.prw-hero-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
-.prw-hero-title{display:flex;align-items:center;gap:8px;min-width:0}
-.prw-hero-title h2{margin:0;font-size:17px;line-height:24px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prw-status-text{font-size:11px;color:var(--dsw-alias-label-secondary)}
-.prw-badges,.prw-chip-row,.prw-locks{display:flex;flex-wrap:wrap;gap:6px}
-.prw-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px;white-space:nowrap}
-.prw-chip-ok{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}
-.prw-summary{margin:0;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:19px}
-.prw-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
-.prw-muted{color:var(--dsw-alias-label-dimmed);font-size:11px;line-height:16px}
-.prw-hero-hint{margin:0}
-.prw-card{border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
-.prw-card-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px}
-.prw-card-head h3{margin:0;font-size:13px;line-height:19px;font-weight:600}
-.prw-card-hint{margin:2px 0 0;color:var(--dsw-alias-label-dimmed);font-size:11px;line-height:16px;max-width:640px}
-.prw-prompt{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--ds-font-family-code,ui-monospace,monospace);font-size:11.5px;line-height:1.75;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:10px 11px;max-height:260px;overflow:auto}
-.prw-prompt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;min-width:0}
-.prw-prompt-grid>*{min-width:0}
-.prw-best{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;padding:10px 12px;border-left:2px solid var(--dsw-alias-brand-primary);border-radius:0 8px 8px 0;background:var(--dsw-alias-bg-layer-1);font-size:11.5px;line-height:18px;color:var(--dsw-alias-label-secondary)}
-.prw-best strong{color:var(--dsw-alias-label-primary);font-weight:600;font-size:12px}
-.prw-mobile{border-color:var(--dsw-alias-brand-primary)}
-.prw-mobile-input{width:100%;min-height:120px;resize:vertical;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);padding:10px 11px;font:inherit;font-size:12px;line-height:1.7;outline:none}
-.prw-mobile-input:focus{border-color:var(--dsw-alias-brand-primary)}
-.prw-mobile-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--dsw-alias-label-dimmed);font-size:11px}
-.prw-progress{gap:8px}
+.prw-flow{margin:2px 0 0;color:var(--dsw-alias-label-secondary);font-size:11px;letter-spacing:.02em}
+.prw-footnote{margin:0;color:var(--dsw-alias-label-dimmed);font-size:11px;line-height:17px;max-width:420px}
+.prw-detail{width:100%;max-width:920px;min-width:0;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.prw-hero{display:grid;grid-template-columns:172px minmax(0,1fr);gap:18px;align-items:start;min-width:0}
+.prw-hero-media{display:flex;flex-direction:column;gap:6px;min-width:0}
+.prw-hero-image{display:block;width:100%;aspect-ratio:3/4;padding:0;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;overflow:hidden;background:var(--dsw-alias-bg-layer-2);cursor:zoom-in}
+.prw-hero-image img{width:100%;height:100%;object-fit:contain;display:block}
+.prw-image-cap{font-size:10px;line-height:14px;color:var(--dsw-alias-label-dimmed);text-align:center;font-variant-numeric:tabular-nums}
+.prw-hero-meta{display:flex;flex-direction:column;gap:8px;min-width:0;padding-top:2px}
+.prw-hero-title{display:flex;align-items:center;gap:9px;min-width:0;flex-wrap:wrap}
+.prw-hero-title h2{margin:0;font-size:18px;line-height:26px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.prw-status-pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:10.5px;line-height:16px;white-space:nowrap}
+.prw-status-pill.prw-status-ready{color:var(--dsw-alias-state-success-primary)}
+.prw-status-pill.prw-status-error{color:var(--dsw-alias-state-error-primary)}
+.prw-status-pill.prw-status-analyzing{color:var(--dsw-alias-state-warn-label)}
+.prw-hero-sub{margin:0;font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-dimmed)}
+.prw-summary{margin:0;color:var(--dsw-alias-label-secondary);font-size:12.5px;line-height:19px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.prw-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:2px}
+.prw-menu-wrap{position:relative}
+.prw-menu{position:absolute;right:0;top:calc(100% + 6px);min-width:150px;display:flex;flex-direction:column;padding:4px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1);box-shadow:0 10px 28px rgba(0,0,0,.18);z-index:30}
+.prw-menu button{appearance:none;border:none;background:transparent;color:var(--dsw-alias-label-primary);text-align:left;padding:7px 9px;border-radius:6px;font:inherit;font-size:12px;line-height:17px;cursor:pointer;white-space:nowrap}
+.prw-menu button:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2)}
+.prw-menu button:disabled{opacity:.4;cursor:not-allowed}
+.prw-menu button.is-danger{color:var(--dsw-alias-state-error-primary)}
+.prw-warning-strip{padding:8px 10px;border-left:2px solid var(--dsw-alias-state-warn-primary);border-radius:0 8px 8px 0;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-state-warn-label);font-size:11.5px;line-height:17px}
+.prw-progress{border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.prw-progress p{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 .prw-progress-bar{height:3px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);overflow:hidden}
 .prw-progress-bar span{display:block;height:100%;width:38%;border-radius:999px;background:var(--dsw-alias-brand-primary);animation:prw-slide 1.4s ease-in-out infinite}
 @keyframes prw-slide{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}
-.prw-error-box{border-color:var(--dsw-alias-state-error-primary)}
-.prw-error-box h3{margin:0;font-size:13px;color:var(--dsw-alias-state-error-primary)}
+.prw-error-box{border:1px solid var(--dsw-alias-state-error-primary);border-radius:10px;background:var(--dsw-alias-bg-layer-1);padding:10px 12px;display:flex;flex-direction:column;gap:5px}
+.prw-error-box h3{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary)}
 .prw-error-box p{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);word-break:break-word}
-.prw-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
-.prw-metrics-4{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
-.prw-metric{display:flex;flex-direction:column;gap:3px;padding:8px 10px;border-radius:8px;background:var(--dsw-alias-bg-layer-2);min-width:0}
-.prw-metric span{color:var(--dsw-alias-label-dimmed);font-size:10px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prw-metric strong{font-size:13px;line-height:18px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prw-face-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding-top:2px}
-.prw-label{display:block;color:var(--dsw-alias-label-dimmed);font-size:10px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px}
-.prw-face-grid p{margin:0 0 3px;font-size:11.5px;line-height:17px;color:var(--dsw-alias-label-secondary)}
-.prw-facts{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--dsw-alias-border-l1);padding-top:10px}
-.prw-facts p{margin:0;font-size:11.5px;line-height:18px;color:var(--dsw-alias-label-secondary)}
-.prw-facts strong{color:var(--dsw-alias-label-primary);font-weight:500}
-.prw-warning{padding:8px 10px;border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-state-warn-label);font-size:11px;line-height:17px}
-.prw-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
-.prw-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.prw-metrics-primary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;overflow:hidden;background:var(--dsw-alias-border-l1)}
+.prw-stat{display:flex;flex-direction:column;gap:2px;padding:9px 12px;background:var(--dsw-alias-bg-layer-1);min-width:0}
+.prw-stat span{color:var(--dsw-alias-label-dimmed);font-size:10.5px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prw-stat strong{font-size:17px;line-height:23px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prw-panel{border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.prw-tabs{display:flex;gap:2px;padding:2px;border-radius:8px;background:var(--dsw-alias-bg-layer-2);width:fit-content;max-width:100%;overflow-x:auto}
+.prw-tab{appearance:none;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:17px;padding:5px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.prw-tab:hover{color:var(--dsw-alias-label-primary)}
+.prw-tab.is-active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.prw-panel-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:26px;flex-wrap:wrap}
+.prw-panel-controls{display:flex;align-items:center;gap:8px;min-width:0}
+.prw-panel-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.prw-seg{display:flex;gap:2px;padding:2px;border-radius:7px;background:var(--dsw-alias-bg-layer-2)}
+.prw-seg-btn{appearance:none;border:none;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;line-height:15px;padding:3px 8px;border-radius:5px;cursor:pointer;white-space:nowrap}
+.prw-seg-btn.is-active{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-weight:600}
+.prw-panel-count{font-size:10.5px;line-height:14px;color:var(--dsw-alias-label-dimmed);font-variant-numeric:tabular-nums;white-space:nowrap}
+.prw-prompt{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--ds-font-family,inherit);font-size:13px;line-height:1.75;color:var(--dsw-alias-label-primary)}
+.prw-prompt.is-en{font-family:var(--ds-font-family-code,ui-monospace,monospace);font-size:12px;line-height:1.7}
+.prw-mobile-input{width:100%;min-height:150px;resize:vertical;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);padding:10px;font:inherit;font-size:12.5px;line-height:1.7;outline:none}
+.prw-mobile-input:focus{border-color:var(--dsw-alias-brand-primary)}
+.prw-panel-hint{margin:0;font-size:10.5px;line-height:16px;color:var(--dsw-alias-label-dimmed)}
+.prw-section{border-top:1px solid var(--dsw-alias-border-l1);min-width:0}
+.prw-section > summary{display:flex;align-items:center;gap:6px;padding:11px 2px;cursor:pointer;font-size:12px;line-height:17px;font-weight:600;color:var(--dsw-alias-label-primary);list-style:none;user-select:none}
+.prw-section > summary::-webkit-details-marker{display:none}
+.prw-section > summary::after{content:"+";margin-left:auto;color:var(--dsw-alias-label-dimmed);font-size:15px;font-weight:400}
+.prw-section[open] > summary::after{content:"−"}
+.prw-summary-meta{color:var(--dsw-alias-label-dimmed);font-size:10.5px;font-weight:400;white-space:nowrap}
+.prw-section-body{display:flex;flex-direction:column;gap:12px;padding:0 2px 14px;min-width:0}
+.prw-kv-group{display:flex;flex-direction:column;gap:5px;min-width:0}
+.prw-kv-group h4{margin:0 0 2px;font-size:11px;line-height:16px;font-weight:600;color:var(--dsw-alias-label-secondary)}
+.prw-kv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px}
+.prw-kv{min-width:0}
+.prw-kv span{display:block;color:var(--dsw-alias-label-dimmed);font-size:10px;line-height:14px;margin-bottom:1px}
+.prw-kv p{margin:0;font-size:12px;line-height:17px;color:var(--dsw-alias-label-secondary);word-break:break-word}
+.prw-paragraph{margin:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.prw-chips{display:flex;flex-wrap:wrap;gap:5px}
+.prw-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);font-size:10px;line-height:15px;white-space:nowrap}
+.prw-blocks{display:flex;flex-direction:column;gap:6px}
+.prw-block{border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-2);overflow:hidden}
+.prw-block summary{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;font-size:11.5px;line-height:16px;list-style:none}
+.prw-block summary::-webkit-details-marker{display:none}
+.prw-block summary::after{content:"+";margin-left:auto;color:var(--dsw-alias-label-dimmed);font-size:13px}
+.prw-block[open] summary::after{content:"−"}
+.prw-block-title{font-weight:500}
+.prw-block-meta{color:var(--dsw-alias-label-dimmed);font-size:10px;font-variant-numeric:tabular-nums}
+.prw-block-body{display:flex;flex-direction:column;gap:6px;padding:0 10px 10px}
+.prw-block-body .prw-prompt{max-height:220px;overflow:auto;font-size:11.5px;background:var(--dsw-alias-bg-layer-1);border-radius:6px;padding:8px}
+.prw-block-foot{display:flex;justify-content:flex-end}
+.prw-form-wrap{display:flex;flex-direction:column;gap:8px}
+.prw-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.prw-field{display:flex;flex-direction:column;gap:3px;min-width:0}
 .prw-field span{color:var(--dsw-alias-label-dimmed);font-size:10px;line-height:14px}
 .prw-field-wide{grid-column:1/-1}
-.prw-textarea{height:auto;min-height:56px;padding:8px;resize:vertical;line-height:1.6}
+.prw-form-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.prw-form-foot p{margin:0}
+.prw-two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.prw-two-col h4{margin:0 0 6px;font-size:11px;line-height:16px;font-weight:600;color:var(--dsw-alias-label-secondary)}
+.prw-list{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:4px;color:var(--dsw-alias-label-secondary);font-size:11.5px;line-height:18px}
+.prw-list strong{color:var(--dsw-alias-label-primary);font-weight:500}
+.prw-raw{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--dsw-alias-border-l1);padding-top:8px;margin-top:2px}
+.prw-link{appearance:none;border:none;background:transparent;color:var(--dsw-alias-brand-primary);font:inherit;font-size:11px;cursor:pointer;padding:0;text-align:left}
+.prw-raw-pre{max-height:280px;overflow:auto;font-family:var(--ds-font-family-code,ui-monospace,monospace);font-size:11px;line-height:1.7;background:var(--dsw-alias-bg-layer-2);border-radius:6px;padding:8px}
+.prw-error-inline{color:var(--dsw-alias-state-error-primary);font-size:11px;margin:0}
 .prw-input{width:100%;height:30px;border:1px solid var(--dsw-alias-border-l2);border-radius:7px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);padding:0 8px;font:inherit;font-size:12px;outline:none}
 .prw-input:focus{border-color:var(--dsw-alias-brand-primary)}
-.prw-two-col{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-.prw-two-col h4{margin:0 0 6px;font-size:12px;line-height:17px;font-weight:600}
-.prw-list{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:5px;color:var(--dsw-alias-label-secondary);font-size:11.5px;line-height:18px}
-.prw-list strong{color:var(--dsw-alias-label-primary);font-weight:500}
-.prw-checklist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;color:var(--dsw-alias-label-secondary);font-size:11.5px;line-height:17px}
-.prw-checklist li{position:relative;padding-left:18px}
-.prw-checklist li::before{content:"";position:absolute;left:2px;top:4px;width:7px;height:7px;border:1px solid var(--dsw-alias-border-l3);border-radius:2px}
-.prw-raw{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--dsw-alias-border-l1);padding-top:10px}
-.prw-link{appearance:none;border:none;background:transparent;color:var(--dsw-alias-brand-primary);font:inherit;font-size:11px;cursor:pointer;padding:0;text-align:left}
-.prw-raw-pre{max-height:320px}
-.prw-error-inline{color:var(--dsw-alias-state-error-primary);font-size:11px;margin:0}
+.prw-textarea{height:auto;min-height:56px;padding:8px;resize:vertical;line-height:1.6}
+.prw-muted{color:var(--dsw-alias-label-dimmed);font-size:11px;line-height:16px}
+.prw-lightbox{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.8);cursor:zoom-out}
+.prw-lightbox img{max-width:92vw;max-height:90vh;object-fit:contain;border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.prw-lightbox-close{position:fixed;top:14px;right:20px;width:32px;height:32px;border:none;border-radius:999px;background:rgba(255,255,255,.12);color:#fff;font-size:20px;line-height:32px;cursor:pointer}
 .prw-toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);padding:8px 16px;border-radius:999px;background:var(--dsw-alias-toast-bg);border:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:50}
-.prw-status-ready{color:var(--dsw-alias-state-success-primary)}
-.prw-status-error{color:var(--dsw-alias-state-error-primary)}
-@media (max-width:1100px){.prw-rail{width:190px}.prw-main{padding:16px 16px 56px}.prw-form{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}}
-@media (max-width:820px){.prw-rail{display:none}.prw-hero{flex-direction:column}.prw-hero-image{width:100%;max-width:280px}.prw-two-col{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1100px){.prw-rail{width:210px}.prw-main{padding:16px 16px 56px}}
+@media (max-width:820px){.prw-rail{display:none}.prw-record-select{display:block}.prw-main{padding:14px 14px 52px}.prw-two-col{grid-template-columns:minmax(0,1fr)}.prw-detail{gap:14px}}
+@media (max-width:640px){.prw-hero{grid-template-columns:minmax(0,1fr)}.prw-hero-media{max-width:300px;margin:0 auto}.prw-metrics-primary{grid-template-columns:repeat(2,minmax(0,1fr))}.prw-kv-grid{grid-template-columns:minmax(0,1fr)}.prw-vision{display:none}}
+@media (max-width:560px){.prw-vision{display:none}.prw-head{padding:8px 12px}.prw-head-actions{gap:6px}.prw-brand h1{font-size:14px}.prw-hero-title h2{font-size:17px}.prw-tabs{width:100%}.prw-panel-bar{align-items:flex-start}.prw-panel-actions{width:100%;justify-content:flex-end}}
 `
 
     return {
