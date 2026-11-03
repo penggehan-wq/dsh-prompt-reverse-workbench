@@ -1846,7 +1846,7 @@ export function apply(ctx, config = {}) {
         head_units: { type: 'number', description: '校正头身比（5.5-9.5）；传 null 清除。' },
         age_range: { type: 'string', description: '校正年龄区间，如 "28-32"。' },
         gender: { type: 'string', description: 'female / male / androgynous / unknown。' },
-        anatomy_note: { type: 'string', description: '可选：手动补充解剖/手部动作，例如“右手食指与中指将大阴唇向两侧剥开”。会追加到身体细节与手机版提示词。' },
+        anatomy_note: { type: 'string', description: '可选：手动补充姿势/手部动作，例如“右手自然放在小腹，左腿微屈”。会追加到身体细节与手机版提示词。' },
         title: { type: 'string', description: '可选，改记录名。' },
       },
       required: ['id'],

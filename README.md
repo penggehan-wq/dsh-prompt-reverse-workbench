@@ -38,7 +38,7 @@
 - **可见裸体 / 身体细节**：`anatomy.visible_nudity`（none / partial / full）+ `chest / genitals / pubic_hair / buttocks / hand_action / finger_action / contact / pose / details` 的中英字段；`subject_scope` 标记完整人物 / 上半身 / 下半身 / 下体特写 / 局部微距。只描述参考图里真实可见的部分，临床、事实性描述；不可见就留空。
 - **局部特写分支**：`subject_scope = genital_closeup / detail_macro` 时，提示词不再补脸、补身高、补族裔，只保留可见局部、手/手指动作、接触、姿势、机位、光线和质感；负向压“补全身、加脸、改阴唇形状/不对称、加/减阴毛、马赛克”。
 - **参考图编辑双版本**：`reference_edit_zh` 是 Qwen 的 `<image1>` 语法；`reference_edit_generic_zh` 去掉了 `<image1>`，给 Seedream / Flux Kontext / Gemini / 豆包参考图用。
-- **手动补充**：校正区新增「身体 / 手部动作补充」，视觉模型漏掉手指动作时可以手填，例如“右手食指与中指把大阴唇向两侧剥开”，会追加到身体细节和手机版。
+- **手动补充**：校正区新增「身体 / 手部动作补充」，视觉模型漏掉姿势或手部动作时可以手填，例如“右手自然放在小腹，左腿微屈”，会追加到身体细节和手机版。
 - 面板新增「族裔 / 骨相」「原图质感 / 参数」「质感锁定」「身体细节」四块；旧记录需要重新反推一次才会带新字段。
 
 ## 手机一键版
