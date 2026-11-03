@@ -1,0 +1,6 @@
+node_modules/
+dist/
+照片输出/
+*.zip
+*.log
+.DS_Store

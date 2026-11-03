@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Prompt Reverse Workbench",
+    "description": "Reverse-engineer a reusable, identity-locked prompt from one portrait: face, body proportions, height ratio, wardrobe, camera and negative prompts."
+  }
+}

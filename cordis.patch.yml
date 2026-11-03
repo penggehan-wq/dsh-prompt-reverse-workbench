@@ -1,0 +1,4 @@
+- insert:
+    - id: prompt-reverse-workbench
+      name: '@local/prompt-reverse-workbench'
+      config: {}

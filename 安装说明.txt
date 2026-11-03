@@ -1,0 +1,43 @@
+图片提示词反推台 v1.1 · 安装说明
+================================
+
+一、解压
+解压到简单路径，例如：
+C:\dsh-plugins\prompt-reverse-workbench
+不要直接在压缩软件的临时目录里运行。
+
+二、安装
+方法 A：DSH 插件管理 → 安装本地插件 → 选择解压后的文件夹（里面有 package.json 的那一层）。
+方法 B：在对话里让 Agent 执行：
+  plugin_manager install_bundle
+  target: C:\dsh-plugins\prompt-reverse-workbench
+
+三、生效
+安装完成后刷新界面，左侧栏会出现「反推台」。
+如果没出现，重启一次 DSH 再看。
+
+四、使用
+1. 打开「反推台」，上传/拖入一张人物参考图。
+2. 等反推完成，会得到身份卡、比例、技术质感和多组提示词。
+3. 要换装/换场景且锁脸：用「参考图编辑」，把原图上传到支持参考图的模型
+   （Qwen-Image-Edit / Seedream / Flux Kontext / Gemini / 豆包参考图），
+   粘贴对应版本；Qwen 用带 <image1> 的版本，其他模型用「参考图编辑 · 通用」。
+4. 只想手机随便生成：用「手机一键版」，整段复制，不带 <image1>、不带负向词。
+5. 局部特写/成人参考：插件会只写可见局部、手/手指动作、姿势机位，不补脸、不补全身。
+
+五、环境要求
+- DSH 0.2.1 及以上。
+- 需要一个能读图的视觉模型；默认走 deepseek-account/deepseek-flash。
+- 参考图编辑需要模型/API 支持图片输入；API Key 自备。
+- 数据保存在 ~/.dsh/prompt-reverse，图片走 attachments；不上传到第三方图库。
+
+六、卸载
+插件管理里删除「图片提示词反推台」，或让 Agent 执行：
+  plugin_manager remove_bundle
+  target: @local/prompt-reverse-workbench
+
+七、常见问题
+- 反推报 402/余额不足：换有余额的视觉模型或 API。
+- 生成脸不像：文生图锁不住真实身份，改用参考图编辑；原图遮挡/裁切越多，能锁的越少。
+- 面板没有「手机一键版」：刷新或重启 DSH，加载新的 Client bundle。
+- 想改提示词：记录页的「校正数值」「身体 / 手部动作补充」可以直接改，保存后重编译。
