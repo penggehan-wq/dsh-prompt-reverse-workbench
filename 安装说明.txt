@@ -1,4 +1,4 @@
-图片提示词反推台 v1.2.1 · 安装说明
+锚点 · 图片提示词反推台 v1.2.2 · 安装说明
 ================================
 
 一、解压
@@ -13,11 +13,11 @@ C:\dsh-plugins\prompt-reverse-workbench
   target: C:\dsh-plugins\prompt-reverse-workbench
 
 三、生效
-安装完成后刷新界面，左侧栏会出现「反推台」。
+安装完成后刷新界面，左侧栏会出现「锚点」。
 如果没出现，重启一次 DSH 再看。
 
 四、使用
-1. 打开「反推台」，上传/拖入一张人物参考图。
+1. 打开「锚点」，上传/拖入一张人物参考图。
 2. 等反推完成，会得到身份卡、比例、技术质感和多组提示词。
 3. 要换装/换场景且锁脸：用「参考图编辑」，把原图上传到支持参考图的模型
    （Qwen-Image-Edit / Seedream / Flux Kontext / Gemini / 豆包参考图），
@@ -32,7 +32,7 @@ C:\dsh-plugins\prompt-reverse-workbench
 - 数据保存在 ~/.dsh/prompt-reverse，图片走 attachments；不上传到第三方图库。
 
 六、卸载
-插件管理里删除「图片提示词反推台」，或让 Agent 执行：
+插件管理里删除「锚点 · 图片提示词反推台」，或让 Agent 执行：
   plugin_manager remove_bundle
   target: @local/prompt-reverse-workbench
 

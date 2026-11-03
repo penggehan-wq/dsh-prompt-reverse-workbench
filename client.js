@@ -7,9 +7,9 @@ window.__ModuleLoader__.load({
     const API = '/api/prompt-reverse'
 
     const zh = {
-      panel: '反推台',
-      title: '图片提示词反推工作台',
-      subtitle: '一张图，锁住脸、身材和身高比例',
+      panel: '锚点',
+      title: '锚点 · 图片提示词反推台',
+      subtitle: '一张图，拆出身份卡、比例与可复用提示词',
       upload: '上传图片',
       uploading: '上传中…',
       records: '记录',
@@ -199,9 +199,9 @@ window.__ModuleLoader__.load({
     }
 
     const en = {
-      panel: 'Reverse',
-      title: 'Prompt Reverse Workbench',
-      subtitle: 'Lock face, build and height ratio from one image',
+      panel: 'Anchor',
+      title: 'Anchor · Prompt Reverse Workbench',
+      subtitle: 'Turn one reference into an identity card, proportions and reusable prompts',
       upload: 'Upload',
       uploading: 'Uploading…',
       records: 'Records',

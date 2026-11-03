@@ -1,5 +1,5 @@
 /**
- * 图片提示词反推工作台 · Host 半
+ * 锚点 · 图片提示词反推台 · Host 半
  *
  * 流程：上传图片 → 视觉模型量出「身份卡」→ 本文件用确定性模板编译提示词
  * → 客户端展示 / 复制 / 校正数值 / 导出。
@@ -1712,7 +1712,7 @@ export function apply(ctx, config = {}) {
 
   ctx.tools.register({
     name: 'prompt_reverse_analyze',
-    description: '把一张人物图片存进「反推台」并反推出可复用的身份锁定提示词。接受本机绝对路径、~/ 路径，或对话里真实的图片附件引用。会等待视觉模型完成（最长约 4 分钟），返回记录 id、身份卡数值、正向/负向/参考图编辑提示词。用于用户说“把这张图反推一下 / 记到反推台 / 给我同一个人物的提示词”。',
+    description: '把一张人物图片存进「锚点」并反推出可复用的身份锁定提示词。接受本机绝对路径、~/ 路径，或对话里真实的图片附件引用。会等待视觉模型完成（最长约 4 分钟），返回记录 id、身份卡数值、正向/负向/参考图编辑提示词。用于用户说“把这张图反推一下 / 记到锚点 / 给我同一个人物的提示词”。',
     timeoutMs: 300000,
     parameters: {
       type: 'object',
@@ -1781,8 +1781,8 @@ export function apply(ctx, config = {}) {
           prompts: fresh.prompts,
           params: fresh.params,
           note: fresh.status === 'ready'
-            ? '已存入反推台。要生成同一人物，把 prompts.full_zh（或 full_en）交给 qwen_generate_image；有原图时用 reference_edit_zh + 原图做 <image1>，并固定尺寸与 seed。'
-            : '已入库，但反推未完成；用 prompt_reverse_get 查询，或在反推台里重试。',
+            ? '已存入「锚点」。要生成同一人物，把 prompts.full_zh（或 full_en）交给 qwen_generate_image；有原图时用 reference_edit_zh + 原图做 <image1>，并固定尺寸与 seed。'
+            : '已入库，但反推未完成；用 prompt_reverse_get 查询，或在「锚点」里重试。',
         }),
       }
     },
@@ -1790,7 +1790,7 @@ export function apply(ctx, config = {}) {
 
   ctx.tools.register({
     name: 'prompt_reverse_list',
-    description: '列出反推台里的记录（最近 80 条）：id、标题、状态、模型、创建时间。用于用户问“反推台里有哪些图 / 上次那个提示词在哪”。',
+    description: '列出「锚点」里的记录（最近 80 条）：id、标题、状态、模型、创建时间。用于用户问“锚点里有哪些图 / 上次那个提示词在哪”。',
     timeoutMs: 10000,
     parameters: {
       type: 'object',
