@@ -67,6 +67,7 @@ window.__ModuleLoader__.load({
       bodyFat: '体脂估算',
       face: '面部',
       body: '身材',
+      proportions: '比例',
       wardrobe: '服装',
       cameraAngle: '机位',
       lighting: '光线',
@@ -255,6 +256,7 @@ window.__ModuleLoader__.load({
       bodyFat: 'Body fat estimate',
       face: 'Face',
       body: 'Body',
+      proportions: 'Proportions',
       wardrobe: 'Wardrobe',
       cameraAngle: 'Camera angle',
       lighting: 'Lighting',
@@ -596,39 +598,42 @@ window.__ModuleLoader__.load({
             : ''
 
       return h('section', { className: 'prw-panel' },
-        h('div', { className: 'prw-tabs' }, tabs.map(([key, label]) =>
-          h('button', {
-            key,
-            type: 'button',
-            className: `prw-tab${activeTab === key ? ' is-active' : ''}`,
-            onClick: () => setTab(key),
-          }, label),
-        )),
-        h('div', { className: 'prw-panel-bar' },
-          h('div', { className: 'prw-panel-controls' },
-            (activeTab === 'main' || activeTab === 'negative')
-              ? h(Seg, { value: lang, onChange: setLang, options: [['zh', t('segZh')], ['en', t('segEn')]] })
-              : null,
-            activeTab === 'reference'
-              ? h(Seg, {
-                value: refMode,
-                onChange: setRefMode,
-                options: [['qwen', t('segQwen')], ...(generic ? [['generic', t('segGeneric')]] : [])],
-              })
-              : null,
-            h('span', { className: 'prw-panel-count' },
-              activeTab === 'mobile' ? `${mobileText.length} ${t('chars')}` : (text ? `${text.length} ${t('chars')}` : '')),
-          ),
-          h('div', { className: 'prw-panel-actions' },
-            activeTab === 'mobile'
-              ? h('button', { type: 'button', className: 'prw-link', onClick: () => setMobileText(mobileGenerated) }, t('resetMobile'))
-              : null,
-            h(CopyButton, {
-              text: activeTab === 'mobile' ? mobileText : text,
-              t,
-              onNotice,
-              label: activeTab === 'mobile' ? t('copyMobile') : undefined,
-            }),
+        h('div', { className: 'prw-prompt-head' },
+          h('div', { className: 'prw-tabs' }, tabs.map(([key, label]) =>
+            h('button', {
+              key,
+              type: 'button',
+              className: `prw-tab${activeTab === key ? ' is-active' : ''}`,
+              onClick: () => setTab(key),
+            }, label),
+          )),
+          h('div', { className: 'prw-panel-bar' },
+            h('div', { className: 'prw-panel-controls' },
+              (activeTab === 'main' || activeTab === 'negative')
+                ? h(Seg, { value: lang, onChange: setLang, options: [['zh', t('segZh')], ['en', t('segEn')]] })
+                : null,
+              activeTab === 'reference'
+                ? h(Seg, {
+                  value: refMode,
+                  onChange: setRefMode,
+                  options: [['qwen', t('segQwen')], ...(generic ? [['generic', t('segGeneric')]] : [])],
+                })
+                : null,
+              h('span', { className: 'prw-panel-count' },
+                activeTab === 'mobile' ? `${mobileText.length} ${t('chars')}` : (text ? `${text.length} ${t('chars')}` : '')),
+            ),
+            h('div', { className: 'prw-panel-actions' },
+              activeTab === 'mobile'
+                ? h('button', { type: 'button', className: 'prw-link', onClick: () => setMobileText(mobileGenerated) }, t('resetMobile'))
+                : null,
+              h(CopyButton, {
+                text: activeTab === 'mobile' ? mobileText : text,
+                t,
+                onNotice,
+                variant: 'primary',
+                label: activeTab === 'mobile' ? t('copyMobile') : undefined,
+              }),
+            ),
           ),
         ),
         activeTab === 'mobile'
@@ -838,7 +843,16 @@ window.__ModuleLoader__.load({
         [t('shoulderHip'), proportions.shoulder_hip_ratio],
         [t('bodyFat'), body.body_fat_percent, '%'],
       ].filter(([, metricValue]) => metricValue !== null && metricValue !== undefined && metricValue !== '')
-      const primaryMetrics = metricCandidates.slice(0, 4)
+      const primaryMetrics = metricCandidates.slice(0, 3)
+      const ratioRows = [
+        [t('faceRatio'), proportions.face_width_height_ratio],
+        [t('ipd'), proportions.interpupillary_face_ratio],
+        [t('noseRatio'), proportions.nose_width_face_ratio],
+        [t('mouthRatio'), proportions.mouth_width_face_ratio],
+        [t('waistHip'), proportions.waist_hip_ratio],
+        [t('legBody'), proportions.leg_body_ratio],
+        [t('shoulderHip'), proportions.shoulder_hip_ratio],
+      ].filter(([, rowValue]) => rowValue !== null && rowValue !== undefined && rowValue !== '')
 
       const faceRows = [
         [t('faceShape'), face.face_shape_zh],
@@ -1041,6 +1055,7 @@ window.__ModuleLoader__.load({
                 analysis.body_zh ? h('p', { className: 'prw-paragraph' }, analysis.body_zh) : null,
                 h('div', { className: 'prw-kv-grid' }, bodyRows.map(([rowLabel, rowValue]) => kv(rowLabel, rowValue))))
               : null,
+            ratioRows.length ? kvGroup(t('proportions'), ratioRows) : null,
             sceneRows.length ? kvGroup(t('scene'), sceneRows) : null,
             prompts && prompts.locks_zh && prompts.locks_zh.length
               ? h('div', { className: 'prw-kv-group' },
@@ -1530,6 +1545,76 @@ window.__ModuleLoader__.load({
 @media (max-width:820px){.prw-rail{display:none}.prw-record-select{display:block}.prw-main{padding:14px 14px 52px}.prw-two-col{grid-template-columns:minmax(0,1fr)}.prw-detail{gap:14px}}
 @media (max-width:640px){.prw-hero{grid-template-columns:minmax(0,1fr)}.prw-hero-media{max-width:300px;margin:0 auto}.prw-metrics-primary{grid-template-columns:repeat(2,minmax(0,1fr))}.prw-kv-grid{grid-template-columns:minmax(0,1fr)}.prw-vision{display:none}}
 @media (max-width:560px){.prw-vision{display:none}.prw-head{padding:8px 12px}.prw-head-actions{gap:6px}.prw-brand h1{font-size:14px}.prw-hero-title h2{font-size:17px}.prw-tabs{width:100%}.prw-panel-bar{align-items:flex-start}.prw-panel-actions{width:100%;justify-content:flex-end}}
+
+/* ---- UI 2.0: one focus, one type scale, one accent ---- */
+.prw-root{font-size:13px}
+.prw-head{padding:12px 24px}
+.prw-rail{width:268px;padding:10px;gap:4px}
+.prw-rail-head{font-size:12px}
+.prw-rail-count{font-size:11px}
+.prw-item{padding:8px;gap:10px}
+.prw-item img{width:56px;height:56px;border-radius:8px}
+.prw-item-title{font-size:13px;line-height:18px}
+.prw-item-sub{font-size:11px;line-height:15px}
+.prw-item.is-active{background:var(--dsw-alias-bg-layer-2);box-shadow:inset 2px 0 0 var(--dsw-alias-brand-primary)}
+.prw-search{height:32px;font-size:13px}
+.prw-main{padding:24px 28px 72px}
+.prw-detail{max-width:1040px;gap:20px}
+.prw-hero{grid-template-columns:280px minmax(0,1fr);gap:24px}
+.prw-hero-image{border-radius:12px}
+.prw-hero-title h2{font-size:20px;line-height:28px}
+.prw-hero-sub,.prw-image-cap{font-size:11px;line-height:15px}
+.prw-summary{font-size:13px;line-height:20px}
+.prw-status-pill{font-size:11px;padding:3px 9px}
+.prw-btn{font-size:13px;padding:7px 12px;border-radius:8px}
+.prw-btn-sm{font-size:12px;padding:5px 10px}
+.prw-vision{font-size:12px}
+.prw-record-select{height:32px;font-size:13px}
+.prw-metrics-primary{display:flex;flex-wrap:wrap;gap:8px;border:0;background:transparent;overflow:visible}
+.prw-stat{flex-direction:row;align-items:baseline;gap:7px;padding:5px 11px;border:1px solid var(--dsw-alias-border-l1);border-radius:999px;background:var(--dsw-alias-bg-layer-1)}
+.prw-stat span{font-size:11px;line-height:16px}
+.prw-stat strong{font-size:14px;line-height:20px}
+.prw-panel{padding:0;border-radius:16px;gap:0}
+.prw-prompt-head{position:sticky;top:0;z-index:5;display:flex;flex-direction:column;gap:10px;padding:14px 18px 12px;border-radius:15px 15px 0 0;background:var(--dsw-alias-bg-layer-1);background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 94%,var(--dsw-alias-bg-base));border-bottom:1px solid var(--dsw-alias-border-l1)}
+.prw-tabs{width:100%;border-radius:12px;background:var(--dsw-alias-bg-layer-2)}
+.prw-tab{font-size:13px;padding:6px 12px;border-radius:8px}
+.prw-tab.is-active{color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-bg-layer-1);box-shadow:none}
+.prw-panel-bar{min-height:30px}
+.prw-panel-count{font-size:11px}
+.prw-seg{display:flex;gap:2px;padding:2px;border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
+.prw-seg-btn{font-size:12px;padding:4px 9px;border-radius:8px}
+.prw-prompt{max-width:72ch;padding:18px 20px 22px;font-size:14px;line-height:1.72;color:var(--dsw-alias-label-primary)}
+.prw-prompt.is-en{font-family:var(--ds-font-family,inherit);font-size:13px;line-height:1.7}
+.prw-mobile-input{width:calc(100% - 36px);min-height:220px;margin:16px 18px 18px;font-size:14px;line-height:1.7;border-radius:12px}
+.prw-panel-hint{padding:0 18px 16px;font-size:12px;line-height:18px}
+.prw-section > summary{font-size:13px;padding:14px 2px}
+.prw-summary-meta{font-size:11px}
+.prw-section-body{gap:16px;padding:0 2px 18px}
+.prw-kv-group h4{font-size:12px}
+.prw-kv span{font-size:11px;line-height:15px}
+.prw-kv p{font-size:13px;line-height:19px}
+.prw-paragraph{font-size:13px;line-height:20px}
+.prw-chip{font-size:11px;padding:3px 9px}
+.prw-block{border:0;border-radius:12px;background:var(--dsw-alias-bg-layer-2)}
+.prw-block summary{font-size:12px;padding:9px 12px}
+.prw-block-meta{font-size:11px}
+.prw-block-body .prw-prompt{padding:10px 12px;font-size:12px;line-height:1.65}
+.prw-field span{font-size:11px}
+.prw-input{height:34px;font-size:13px;border-radius:8px}
+.prw-textarea{min-height:72px}
+.prw-muted{font-size:12px;line-height:18px}
+.prw-form-foot p{font-size:12px}
+.prw-menu{border-radius:12px}
+.prw-menu button{font-size:13px;padding:8px 10px}
+.prw-warning-strip{font-size:12px;line-height:18px}
+.prw-progress,.prw-error-box{border-radius:12px}
+.prw-drop{border-radius:16px}
+.prw-drop h2{font-size:17px}
+.prw-drop p,.prw-flow,.prw-footnote{font-size:12px;line-height:18px}
+.prw-root button:focus-visible,.prw-root input:focus-visible,.prw-root select:focus-visible,.prw-root textarea:focus-visible,.prw-root summary:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+@media (max-width:1100px){.prw-rail{width:220px}.prw-main{padding:20px 20px 64px}.prw-hero{grid-template-columns:240px minmax(0,1fr);gap:20px}}
+@media (max-width:820px){.prw-rail{display:none}.prw-main{padding:16px 16px 56px}.prw-hero{grid-template-columns:220px minmax(0,1fr);gap:16px}}
+@media (max-width:640px){.prw-hero{grid-template-columns:minmax(0,1fr)}.prw-hero-media{max-width:320px}.prw-metrics-primary{gap:6px}.prw-prompt{padding:16px;font-size:13px}.prw-prompt-head{padding:12px 14px 10px}}
 `
 
     return {
