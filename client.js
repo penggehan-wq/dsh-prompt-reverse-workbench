@@ -33,7 +33,10 @@ window.__ModuleLoader__.load({
       analyze: '开始反推',
       retry: '重新反推',
       delete: '删除',
-      export: '导出 JSON',
+      newBlank: '新建空白页',
+      blankHint: '从空白页重新上传一张参考图。',
+      exportText: '导出提示词（TXT）',
+      exportJson: '导出完整数据（JSON）',
       copyAll: '复制提示词包',
       copy: '复制',
       copied: '已复制',
@@ -222,7 +225,10 @@ window.__ModuleLoader__.load({
       analyze: 'Analyze',
       retry: 'Re-analyze',
       delete: 'Delete',
-      export: 'Export JSON',
+      newBlank: 'New blank page',
+      blankHint: 'Start again with a blank upload page.',
+      exportText: 'Export prompts (TXT)',
+      exportJson: 'Export full data (JSON)',
       copyAll: 'Copy prompt pack',
       copy: 'Copy',
       copied: 'Copied',
@@ -991,8 +997,13 @@ window.__ModuleLoader__.load({
                   h('button', {
                     type: 'button',
                     disabled: !record.analysis,
-                    onClick: () => { setMenu(false); onExport(record) },
-                  }, t('export')),
+                    onClick: () => { setMenu(false); onExport(record, 'txt') },
+                  }, t('exportText')),
+                  h('button', {
+                    type: 'button',
+                    disabled: !record.analysis,
+                    onClick: () => { setMenu(false); onExport(record, 'json') },
+                  }, t('exportJson')),
                   h('button', {
                     type: 'button',
                     disabled: busy || analyzing,
@@ -1115,6 +1126,8 @@ window.__ModuleLoader__.load({
       const t = useT(ctx)
       const [state, setState] = React.useState({ records: [], vision: null, total: 0 })
       const [selectedId, setSelectedId] = React.useState(null)
+      const [blank, setBlank] = React.useState(false)
+      const blankRef = React.useRef(false)
       const [drag, setDrag] = React.useState(false)
       const [busy, setBusy] = React.useState('')
       const [error, setError] = React.useState('')
@@ -1127,7 +1140,7 @@ window.__ModuleLoader__.load({
           const suffix = id ? `?selected=${encodeURIComponent(id)}` : ''
           const next = await api(`state${suffix}`)
           setState(next)
-          if (!id && next.selected && next.selected.id) setSelectedId(next.selected.id)
+          if (!id && next.selected && next.selected.id && !blankRef.current) setSelectedId(next.selected.id)
           setError('')
           return next
         } catch (e) {
@@ -1165,6 +1178,8 @@ window.__ModuleLoader__.load({
         try {
           const prepared = await prepareUpload(file)
           const out = await post('upload', prepared)
+          blankRef.current = false
+          setBlank(false)
           setSelectedId(out.record.id)
           await refresh(out.record.id)
         } catch (e) {
@@ -1188,7 +1203,7 @@ window.__ModuleLoader__.load({
         return () => window.removeEventListener('paste', onPaste)
       }, [uploadFile])
 
-      const selected = state.selected || null
+      const selected = blank ? null : (state.selected || null)
       const needle = query.trim().toLowerCase()
       const visibleRecords = needle
         ? state.records.filter((record) => String(record.title || '').toLowerCase().includes(needle))
@@ -1239,6 +1254,53 @@ window.__ModuleLoader__.load({
         window.setTimeout(() => URL.revokeObjectURL(url), 2000)
       }
 
+      const exportText = (record) => {
+        const a = record.analysis || {}
+        const p = record.prompts || {}
+        const lines = [
+          `反推资料：${record.title || '未命名'}`,
+          '',
+          '【身份与比例】',
+          a.identity_zh || '',
+          a.ethnicity_zh ? `族裔 / 骨相：${a.ethnicity_zh}；${a.face_structure_zh || ''}` : '',
+          a.body_zh ? `身材：${a.body_zh}` : '',
+          '',
+          '【主提示词】',
+          p.full_zh || '',
+          '',
+          '【负向提示词】',
+          p.negative_zh || '',
+          '',
+          '【参考图编辑】',
+          p.reference_edit_zh || '',
+          '',
+          '【手机一键版】',
+          p.mobile_zh || '',
+          '',
+          '【质感锁定】',
+          p.quality_lock_zh || '',
+          '',
+          '【参数】',
+          record.params ? `${record.params.width}×${record.params.height} · steps ${record.params.steps} · ${record.params.scheduler} · seed ${record.params.seed ?? '随机'}` : '',
+        ].filter((line) => line !== '')
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `反推资料-${(record.title || '未命名').replace(/[\\/:*?"<>|]/gu, '_')}.txt`
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+        window.setTimeout(() => URL.revokeObjectURL(url), 2000)
+      }
+
+      const startBlank = () => {
+        blankRef.current = true
+        setBlank(true)
+        setSelectedId(null)
+        setState((prev) => ({ ...prev, selected: null }))
+      }
+
       const copyAll = async (record) => {
         const text = record.prompts && record.prompts.combined_zh
         if (!text) return
@@ -1264,6 +1326,8 @@ window.__ModuleLoader__.load({
       }
 
       const selectRecord = (id) => {
+        blankRef.current = false
+        setBlank(false)
         setSelectedId(id)
         void refresh(id)
       }
@@ -1297,6 +1361,8 @@ window.__ModuleLoader__.load({
               h('span', { className: 'prw-vision-dot' }),
               h('span', null, visionText),
             ) : null,
+            h('button', { type: 'button', className: 'prw-btn prw-btn-sm', onClick: startBlank, title: t('blankHint') },
+              `＋ ${t('newBlank')}`),
             h('button', { type: 'button', className: 'prw-btn prw-btn-primary', onClick: pick, disabled: busy === 'upload' },
               busy === 'upload' ? t('uploading') : `+ ${t('upload')}`),
             h('input', {
@@ -1319,7 +1385,10 @@ window.__ModuleLoader__.load({
           h('aside', { className: 'prw-rail' },
             h('div', { className: 'prw-rail-head' },
               h('span', null, t('records')),
-              h('span', { className: 'prw-rail-count' }, String(state.total || state.records.length)),
+              h('div', { className: 'prw-rail-head-actions' },
+                h('button', { type: 'button', className: 'prw-rail-new', onClick: startBlank, title: t('blankHint'), 'aria-label': t('newBlank') }, '＋'),
+                h('span', { className: 'prw-rail-count' }, String(state.total || state.records.length)),
+              ),
             ),
             h('input', {
               className: 'prw-search',
@@ -1355,7 +1424,7 @@ window.__ModuleLoader__.load({
               t,
               onAnalyze: analyze,
               onDelete: remove,
-              onExport: exportRecord,
+              onExport: (record, format) => (format === 'txt' ? exportText(record) : exportRecord(record)),
               onCopyAll: copyAll,
               onUpdated: updateRecord,
               onNotice: notify,
@@ -1612,6 +1681,19 @@ window.__ModuleLoader__.load({
 .prw-drop h2{font-size:17px}
 .prw-drop p,.prw-flow,.prw-footnote{font-size:12px;line-height:18px}
 .prw-root button:focus-visible,.prw-root input:focus-visible,.prw-root select:focus-visible,.prw-root textarea:focus-visible,.prw-root summary:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+
+/* accordions should look clickable, not like dividers */
+.prw-section{border-top:0;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);overflow:hidden}
+.prw-section + .prw-section{margin-top:8px}
+.prw-section > summary{padding:14px 14px;border-radius:12px;background:var(--dsw-alias-bg-layer-1);transition:background .15s ease,color .15s ease}
+.prw-section > summary:hover{background:var(--dsw-alias-bg-layer-2)}
+.prw-section[open] > summary{background:var(--dsw-alias-bg-layer-2);border-bottom:1px solid var(--dsw-alias-border-l1);border-radius:12px 12px 0 0}
+.prw-section > summary::after{content:"展开  ＋";width:auto;height:24px;padding:0 9px;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-bg-layer-1);font-size:11px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+.prw-section[open] > summary::after{content:"收起  －";color:var(--dsw-alias-label-secondary)}
+.prw-section-body{padding:14px 14px 16px}
+.prw-rail-head-actions{display:flex;align-items:center;gap:8px}
+.prw-rail-new{width:22px;height:22px;padding:0;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-brand-primary);font:inherit;font-size:14px;line-height:20px;cursor:pointer}
+.prw-rail-new:hover{background:var(--dsw-alias-interactive-bg-hover);border-color:var(--dsw-alias-brand-primary)}
 @media (max-width:1100px){.prw-rail{width:220px}.prw-main{padding:20px 20px 64px}.prw-hero{grid-template-columns:240px minmax(0,1fr);gap:20px}}
 @media (max-width:820px){.prw-rail{display:none}.prw-main{padding:16px 16px 56px}.prw-hero{grid-template-columns:220px minmax(0,1fr);gap:16px}}
 @media (max-width:640px){.prw-hero{grid-template-columns:minmax(0,1fr)}.prw-hero-media{max-width:320px}.prw-metrics-primary{gap:6px}.prw-prompt{padding:16px;font-size:13px}.prw-prompt-head{padding:12px 14px 10px}}
